@@ -94,7 +94,7 @@ export interface OutfitCreateInput {
   isFavorite?: boolean
 }
 
-export interface OutfitUpdateInput extends OutfitCreateInput {}
+export type OutfitUpdateInput = OutfitCreateInput
 
 export interface PhotoUploadInput {
   blob: Blob
@@ -102,4 +102,3 @@ export interface PhotoUploadInput {
   width: number
   height: number
 }
-
