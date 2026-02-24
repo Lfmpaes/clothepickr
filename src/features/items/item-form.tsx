@@ -2,8 +2,10 @@ import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { useLocale } from '@/app/locale-context'
 import type { Category, ClothingItem, ClothingStatus } from '@/lib/types'
-import { STATUS_ORDER, STATUS_LABEL } from '@/lib/constants'
+import { STATUS_ORDER } from '@/lib/constants'
+import { getLocalizedCategoryName, getLocalizedStatusLabel } from '@/lib/i18n/helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,6 +44,7 @@ interface ItemFormProps {
 }
 
 export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: ItemFormProps) {
+  const { t } = useLocale()
   const form = useForm<ItemFormValues>({
     resolver: zodResolver(itemFormSchema),
     defaultValues: {
@@ -95,59 +98,63 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <Label htmlFor="item-name">Item name</Label>
-          <Input id="item-name" placeholder="Example: White Oxford Shirt" {...form.register('name')} />
+          <Label htmlFor="item-name">{t('itemForm.nameLabel')}</Label>
+          <Input
+            id="item-name"
+            placeholder={t('itemForm.namePlaceholder')}
+            {...form.register('name')}
+          />
           {form.formState.errors.name ? (
             <p className="mt-1 text-xs text-rose-700">{form.formState.errors.name.message}</p>
           ) : null}
         </div>
 
         <div>
-          <Label htmlFor="item-category">Category</Label>
+          <Label htmlFor="item-category">{t('itemForm.categoryLabel')}</Label>
           <Select id="item-category" {...form.register('categoryId')}>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
-                {category.name}
+                {getLocalizedCategoryName(category.name, t)}
               </option>
             ))}
           </Select>
         </div>
 
         <div>
-          <Label htmlFor="item-status">Status</Label>
+          <Label htmlFor="item-status">{t('itemForm.statusLabel')}</Label>
           <Select id="item-status" {...form.register('status')}>
             {STATUS_ORDER.map((status) => (
               <option key={status} value={status}>
-                {STATUS_LABEL[status]}
+                {getLocalizedStatusLabel(status, t)}
               </option>
             ))}
           </Select>
         </div>
 
         <div>
-          <Label htmlFor="item-color">Color</Label>
+          <Label htmlFor="item-color">{t('itemForm.colorLabel')}</Label>
           <Input id="item-color" {...form.register('color')} />
         </div>
         <div>
-          <Label htmlFor="item-brand">Brand</Label>
+          <Label htmlFor="item-brand">{t('itemForm.brandLabel')}</Label>
           <Input id="item-brand" {...form.register('brand')} />
         </div>
         <div>
-          <Label htmlFor="item-size">Size</Label>
+          <Label htmlFor="item-size">{t('itemForm.sizeLabel')}</Label>
           <Input id="item-size" {...form.register('size')} />
         </div>
         <div>
-          <Label htmlFor="item-tags">Season tags (comma separated)</Label>
-          <Input id="item-tags" placeholder="summer, office" {...form.register('seasonTags')} />
+          <Label htmlFor="item-tags">{t('itemForm.tagsLabel')}</Label>
+          <Input id="item-tags" placeholder={t('itemForm.tagsPlaceholder')} {...form.register('seasonTags')} />
         </div>
 
         <div className="sm:col-span-2">
-          <Label htmlFor="item-notes">Notes</Label>
+          <Label htmlFor="item-notes">{t('itemForm.notesLabel')}</Label>
           <Textarea id="item-notes" {...form.register('notes')} />
         </div>
 
         <div className="sm:col-span-2">
-          <Label htmlFor="item-photos">Upload photos (optional)</Label>
+          <Label htmlFor="item-photos">{t('itemForm.photosLabel')}</Label>
           <Input
             id="item-photos"
             type="file"

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
+import { useLocale } from '@/app/locale-context'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -9,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { outfitRepository, itemRepository } from '@/lib/db'
 
 export function OutfitsPage() {
+  const { t } = useLocale()
   const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -25,13 +27,13 @@ export function OutfitsPage() {
     setError(undefined)
     try {
       await outfitRepository.toggleFavorite(outfitId)
-    } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : 'Unable to update outfit.')
+    } catch {
+      setError(t('outfits.errorUpdate'))
     }
   }
 
   const handleDelete = async (outfitId: string) => {
-    const confirmed = window.confirm('Delete this outfit?')
+    const confirmed = window.confirm(t('outfits.confirmDelete'))
     if (!confirmed) {
       return
     }
@@ -39,19 +41,19 @@ export function OutfitsPage() {
     setError(undefined)
     try {
       await outfitRepository.remove(outfitId)
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'Unable to delete outfit.')
+    } catch {
+      setError(t('outfits.errorDelete'))
     }
   }
 
   return (
     <section>
       <PageHeader
-        title="Outfits & Styles"
-        subtitle="Build flexible outfits and mark your favorites."
+        title={t('outfits.title')}
+        subtitle={t('outfits.subtitle')}
         actions={
           <Link to="/outfits/new">
-            <Button>Create outfit</Button>
+            <Button>{t('outfits.create')}</Button>
           </Link>
         }
       />
@@ -62,7 +64,7 @@ export function OutfitsPage() {
           checked={favoriteOnly}
           onChange={(event) => setFavoriteOnly(event.target.checked)}
         />
-        <Label htmlFor="favorite-outfits-filter">Only favorite outfits</Label>
+        <Label htmlFor="favorite-outfits-filter">{t('outfits.onlyFavorites')}</Label>
       </div>
 
       {error ? (
@@ -73,9 +75,9 @@ export function OutfitsPage() {
 
       {outfits.length === 0 ? (
         <Card>
-          <CardTitle>No outfits saved yet.</CardTitle>
+          <CardTitle>{t('outfits.emptyTitle')}</CardTitle>
           <CardDescription className="mt-1">
-            Build your first outfit by combining items from any category.
+            {t('outfits.emptyDescription')}
           </CardDescription>
         </Card>
       ) : (
@@ -92,19 +94,20 @@ export function OutfitsPage() {
                   <div>
                     <CardTitle>{outfit.name}</CardTitle>
                     <CardDescription className="mt-1">
-                      {outfit.occasion || 'No occasion'} - {resolvedItems.length} pieces
+                      {outfit.occasion || t('outfits.noOccasion')} -{' '}
+                      {t('outfits.pieces', { count: resolvedItems.length })}
                     </CardDescription>
                   </div>
                   {outfit.isFavorite ? (
                     <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
-                      Favorite
+                      {t('outfits.favoriteBadge')}
                     </span>
                   ) : null}
                 </div>
 
                 {hasNonCleanItem ? (
                   <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                    Warning: this outfit includes items that are not clean.
+                    {t('outfits.warningNotClean')}
                   </p>
                 ) : null}
 
@@ -125,15 +128,15 @@ export function OutfitsPage() {
                     variant="outline"
                     onClick={() => handleToggleFavorite(outfit.id)}
                   >
-                    {outfit.isFavorite ? 'Unfavorite' : 'Favorite'}
+                    {outfit.isFavorite ? t('outfits.unfavorite') : t('outfits.favorite')}
                   </Button>
                   <Link to={`/outfits/${outfit.id}`}>
                     <Button size="sm" variant="ghost">
-                      Edit
+                      {t('outfits.edit')}
                     </Button>
                   </Link>
                   <Button size="sm" variant="ghost" onClick={() => handleDelete(outfit.id)}>
-                    Delete
+                    {t('outfits.delete')}
                   </Button>
                 </div>
               </Card>
@@ -144,4 +147,3 @@ export function OutfitsPage() {
     </section>
   )
 }
-

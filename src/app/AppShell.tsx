@@ -34,7 +34,7 @@ export function AppShell() {
           <Link
             to="/"
             className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70"
-            aria-label="Go to ClothePickr home"
+            aria-label={t('nav.homeAria')}
           >
             <BrandLogo compact />
           </Link>

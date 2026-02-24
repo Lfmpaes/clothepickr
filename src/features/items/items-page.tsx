@@ -11,11 +11,14 @@ import { Select } from '@/components/ui/select'
 import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { StatusBadge } from '@/components/status-badge'
-import { STATUS_LABEL, STATUS_ORDER } from '@/lib/constants'
+import { useLocale } from '@/app/locale-context'
+import { STATUS_ORDER } from '@/lib/constants'
 import { categoryRepository, itemRepository, statusMachine } from '@/lib/db'
+import { getLocalizedCategoryName, getLocalizedStatusLabel } from '@/lib/i18n/helpers'
 import type { ClothingStatus } from '@/lib/types'
 
 export function ItemsPage() {
+  const { t } = useLocale()
   const categories = useLiveQuery(() => categoryRepository.list(), [], [])
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
@@ -39,28 +42,31 @@ export function ItemsPage() {
     () => Object.fromEntries(categories.map((category) => [category.id, category.name])),
     [categories],
   )
+  const categoryLabelById = useMemo(
+    () =>
+      Object.fromEntries(
+        categories.map((category) => [category.id, getLocalizedCategoryName(category.name, t)]),
+      ),
+    [categories, t],
+  )
 
   const handleQuickCycle = async (itemId: string, currentStatus: ClothingStatus) => {
     setError(undefined)
     try {
       await statusMachine.transition(itemId, statusMachine.nextSuggestedStatus(currentStatus), 'cycle')
-    } catch (transitionError) {
-      setError(
-        transitionError instanceof Error
-          ? transitionError.message
-          : 'Could not update item status.',
-      )
+    } catch {
+      setError(t('items.errorTransition'))
     }
   }
 
   return (
     <section>
       <PageHeader
-        title="Clothing Items"
-        subtitle="Filter your wardrobe and update laundry status with one tap."
+        title={t('items.title')}
+        subtitle={t('items.subtitle')}
         actions={
           <Link to="/items/new">
-            <Button>Add item</Button>
+            <Button>{t('items.add')}</Button>
           </Link>
         }
       />
@@ -68,40 +74,40 @@ export function ItemsPage() {
       <Card className="mb-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <Label htmlFor="item-search">Search</Label>
+            <Label htmlFor="item-search">{t('items.searchLabel')}</Label>
             <Input
               id="item-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Name, brand, notes..."
+              placeholder={t('items.searchPlaceholder')}
             />
           </div>
           <div>
-            <Label htmlFor="item-category-filter">Category</Label>
+            <Label htmlFor="item-category-filter">{t('items.categoryLabel')}</Label>
             <Select
               id="item-category-filter"
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
             >
-              <option value="all">All categories</option>
+              <option value="all">{t('items.allCategories')}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {getLocalizedCategoryName(category.name, t)}
                 </option>
               ))}
             </Select>
           </div>
           <div>
-            <Label htmlFor="item-status-filter">Status</Label>
+            <Label htmlFor="item-status-filter">{t('items.statusLabel')}</Label>
             <Select
               id="item-status-filter"
               value={status}
               onChange={(event) => setStatus(event.target.value as 'all' | ClothingStatus)}
             >
-              <option value="all">All statuses</option>
+              <option value="all">{t('items.allStatuses')}</option>
               {STATUS_ORDER.map((value) => (
                 <option key={value} value={value}>
-                  {STATUS_LABEL[value]}
+                  {getLocalizedStatusLabel(value, t)}
                 </option>
               ))}
             </Select>
@@ -112,7 +118,7 @@ export function ItemsPage() {
               checked={favoriteOnly}
               onChange={(event) => setFavoriteOnly(event.target.checked)}
             />
-            <Label htmlFor="item-favorites-filter">Only items in favorite outfits</Label>
+            <Label htmlFor="item-favorites-filter">{t('items.favoriteFilter')}</Label>
           </div>
         </div>
       </Card>
@@ -125,9 +131,9 @@ export function ItemsPage() {
 
       {items.length === 0 ? (
         <Card>
-          <CardTitle>No items match your filters.</CardTitle>
+          <CardTitle>{t('items.noMatchTitle')}</CardTitle>
           <CardDescription className="mt-1">
-            Add items or change the current filters.
+            {t('items.noMatchDescription')}
           </CardDescription>
         </Card>
       ) : (
@@ -141,8 +147,10 @@ export function ItemsPage() {
                 <div className="min-w-0 flex-1">
                   <CardTitle className="truncate">{item.name}</CardTitle>
                   <CardDescription className="mt-1 inline-flex items-center gap-1">
-                    <CategoryPanelIcon categoryName={categoryNameById[item.categoryId] ?? 'Category'} />
-                    {categoryNameById[item.categoryId] ?? 'Unknown category'}
+                    <CategoryPanelIcon
+                      categoryName={categoryNameById[item.categoryId] ?? t('category.unknown')}
+                    />
+                    {categoryLabelById[item.categoryId] ?? t('category.unknown')}
                   </CardDescription>
                   <div className="mt-2 flex items-center gap-2">
                     <StatusBadge status={item.status} />
@@ -156,11 +164,13 @@ export function ItemsPage() {
                   variant="outline"
                   onClick={() => handleQuickCycle(item.id, item.status)}
                 >
-                  Move to {STATUS_LABEL[statusMachine.nextSuggestedStatus(item.status)]}
+                  {t('items.moveTo', {
+                    status: getLocalizedStatusLabel(statusMachine.nextSuggestedStatus(item.status), t),
+                  })}
                 </Button>
                 <Link to={`/items/${item.id}`}>
                   <Button size="sm" variant="ghost">
-                    Open
+                    {t('items.open')}
                   </Button>
                 </Link>
               </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
+import { useLocale } from '@/app/locale-context'
 import type { ClothingItem, Outfit } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -35,6 +36,7 @@ interface OutfitFormProps {
 }
 
 export function OutfitForm({ items, initialOutfit, submitLabel, onSubmit }: OutfitFormProps) {
+  const { t } = useLocale()
   const form = useForm<OutfitFormValues>({
     resolver: zodResolver(outfitFormSchema),
     defaultValues: {
@@ -70,30 +72,38 @@ export function OutfitForm({ items, initialOutfit, submitLabel, onSubmit }: Outf
     <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <Label htmlFor="outfit-name">Outfit name</Label>
-          <Input id="outfit-name" placeholder="Example: Weekend Casual" {...form.register('name')} />
+          <Label htmlFor="outfit-name">{t('outfitForm.nameLabel')}</Label>
+          <Input
+            id="outfit-name"
+            placeholder={t('outfitForm.namePlaceholder')}
+            {...form.register('name')}
+          />
           {form.formState.errors.name ? (
             <p className="mt-1 text-xs text-rose-700">{form.formState.errors.name.message}</p>
           ) : null}
         </div>
 
         <div>
-          <Label htmlFor="outfit-occasion">Occasion</Label>
-          <Input id="outfit-occasion" placeholder="Office, gym, travel..." {...form.register('occasion')} />
+          <Label htmlFor="outfit-occasion">{t('outfitForm.occasionLabel')}</Label>
+          <Input
+            id="outfit-occasion"
+            placeholder={t('outfitForm.occasionPlaceholder')}
+            {...form.register('occasion')}
+          />
         </div>
         <div className="flex items-end gap-2">
           <Checkbox id="outfit-favorite" {...form.register('isFavorite')} />
-          <Label htmlFor="outfit-favorite">Mark as favorite style</Label>
+          <Label htmlFor="outfit-favorite">{t('outfitForm.favoriteLabel')}</Label>
         </div>
 
         <div className="sm:col-span-2">
-          <Label htmlFor="outfit-notes">Notes</Label>
+          <Label htmlFor="outfit-notes">{t('outfitForm.notesLabel')}</Label>
           <Textarea id="outfit-notes" {...form.register('notes')} />
         </div>
       </div>
 
       <div>
-        <CardTitle className="mb-2">Pick clothing items</CardTitle>
+        <CardTitle className="mb-2">{t('outfitForm.pickItems')}</CardTitle>
         <div className="grid gap-2 sm:grid-cols-2">
           {items.map((item) => (
             <label
@@ -128,9 +138,9 @@ export function OutfitForm({ items, initialOutfit, submitLabel, onSubmit }: Outf
       </div>
 
       <Card>
-        <CardTitle>Preview</CardTitle>
+        <CardTitle>{t('outfitForm.preview')}</CardTitle>
         {selectedItems.length === 0 ? (
-          <CardDescription className="mt-1">Select at least one item.</CardDescription>
+          <CardDescription className="mt-1">{t('outfitForm.previewEmpty')}</CardDescription>
         ) : (
           <div className="mt-2 grid gap-2">
             {selectedItems.map((item) => (

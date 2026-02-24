@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/page-header'
 import { useLocale } from '@/app/locale-context'
 import { itemRepository, outfitRepository } from '@/lib/db'
-import { STATUS_LABEL, STATUS_ORDER } from '@/lib/constants'
+import { STATUS_ORDER } from '@/lib/constants'
+import { getLocalizedStatusLabel } from '@/lib/i18n/helpers'
 
 export function DashboardPage() {
   const { t } = useLocale()
@@ -60,7 +61,7 @@ export function DashboardPage() {
         {byStatus.map((row) => (
           <Card key={row.status}>
             <div className="flex items-center justify-between">
-              <CardDescription>{STATUS_LABEL[row.status]}</CardDescription>
+              <CardDescription>{getLocalizedStatusLabel(row.status, t)}</CardDescription>
               <StatusPanelIcon status={row.status} />
             </div>
             <CardTitle className="mt-2 text-2xl">{row.count}</CardTitle>

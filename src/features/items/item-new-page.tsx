@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
+import { useLocale } from '@/app/locale-context'
 import { categoryRepository, itemRepository } from '@/lib/db'
 import { compressImage } from '@/lib/images/compress'
 import { PageHeader } from '@/components/page-header'
@@ -8,6 +9,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { ItemForm } from '@/features/items/item-form'
 
 export function ItemNewPage() {
+  const { t } = useLocale()
   const navigate = useNavigate()
   const categories = useLiveQuery(() => categoryRepository.list(), [], [])
   const [error, setError] = useState<string>()
@@ -33,23 +35,23 @@ export function ItemNewPage() {
         await itemRepository.attachPhoto(item.id, compressed)
       }
       navigate(`/items/${item.id}`)
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Unable to create item.')
+    } catch {
+      setError(t('itemNew.errorCreate'))
     }
   }
 
   return (
     <section>
       <PageHeader
-        title="Add Clothing Item"
-        subtitle="Create an item and optionally upload local photos."
+        title={t('itemNew.title')}
+        subtitle={t('itemNew.subtitle')}
       />
 
       {categories.length === 0 ? (
         <Card>
-          <CardTitle>No categories available</CardTitle>
+          <CardTitle>{t('itemNew.noCategoriesTitle')}</CardTitle>
           <CardDescription className="mt-1">
-            Add or restore a category before creating items.
+            {t('itemNew.noCategoriesDescription')}
           </CardDescription>
         </Card>
       ) : (
@@ -59,10 +61,9 @@ export function ItemNewPage() {
               {error}
             </p>
           ) : null}
-          <ItemForm categories={categories} submitLabel="Create item" onSubmit={handleCreate} />
+          <ItemForm categories={categories} submitLabel={t('itemNew.create')} onSubmit={handleCreate} />
         </Card>
       )}
     </section>
   )
 }
-

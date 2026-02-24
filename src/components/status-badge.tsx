@@ -1,4 +1,5 @@
-import { STATUS_LABEL } from '@/lib/constants'
+import { useLocale } from '@/app/locale-context'
+import { getLocalizedStatusLabel } from '@/lib/i18n/helpers'
 import type { ClothingStatus } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 
@@ -7,6 +8,6 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  return <Badge variant={status}>{STATUS_LABEL[status]}</Badge>
+  const { t } = useLocale()
+  return <Badge variant={status}>{getLocalizedStatusLabel(status, t)}</Badge>
 }
-

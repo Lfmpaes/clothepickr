@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useLocale } from '@/app/locale-context'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -8,13 +9,15 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { ItemForm } from '@/features/items/item-form'
-import { STATUS_LABEL, STATUS_ORDER } from '@/lib/constants'
+import { STATUS_ORDER } from '@/lib/constants'
 import { categoryRepository, itemRepository, laundryRepository, statusMachine } from '@/lib/db'
+import { getLocalizedStatusLabel } from '@/lib/i18n/helpers'
 import { compressImage } from '@/lib/images/compress'
 import type { ClothingStatus } from '@/lib/types'
 import { formatDateTime } from '@/lib/utils'
 
 export function ItemDetailPage() {
+  const { t } = useLocale()
   const { id } = useParams()
   const navigate = useNavigate()
   const categories = useLiveQuery(() => categoryRepository.list(), [], [])
@@ -26,7 +29,7 @@ export function ItemDetailPage() {
   if (!id) {
     return (
       <Card>
-        <CardTitle>Invalid route</CardTitle>
+        <CardTitle>{t('itemDetail.invalidRoute')}</CardTitle>
       </Card>
     )
   }
@@ -34,9 +37,9 @@ export function ItemDetailPage() {
   if (!item) {
     return (
       <Card>
-        <CardTitle>Item not found</CardTitle>
+        <CardTitle>{t('itemDetail.notFound')}</CardTitle>
         <Link to="/items" className="mt-3 inline-block">
-          <Button variant="outline">Back to items</Button>
+          <Button variant="outline">{t('itemDetail.backToItems')}</Button>
         </Link>
       </Card>
     )
@@ -62,13 +65,13 @@ export function ItemDetailPage() {
         const compressed = await compressImage(file)
         await itemRepository.attachPhoto(item.id, compressed)
       }
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'Unable to update item.')
+    } catch {
+      setError(t('itemDetail.errorUpdate'))
     }
   }
 
   const handleDelete = async () => {
-    const confirmed = window.confirm('Delete this item? This also removes linked logs and photos.')
+    const confirmed = window.confirm(t('itemDetail.confirmDelete'))
     if (!confirmed) {
       return
     }
@@ -80,8 +83,8 @@ export function ItemDetailPage() {
     setError(undefined)
     try {
       await statusMachine.transition(item.id, status, 'manual')
-    } catch (changeError) {
-      setError(changeError instanceof Error ? changeError.message : 'Unable to update status.')
+    } catch {
+      setError(t('itemDetail.errorStatus'))
     }
   }
 
@@ -89,14 +92,14 @@ export function ItemDetailPage() {
     setError(undefined)
     try {
       await itemRepository.detachPhoto(item.id, photoId)
-    } catch (detachError) {
-      setError(detachError instanceof Error ? detachError.message : 'Unable to remove photo.')
+    } catch {
+      setError(t('itemDetail.errorPhoto'))
     }
   }
 
   return (
     <section>
-      <PageHeader title={item.name} subtitle="Edit details, status, and photos." />
+      <PageHeader title={item.name} subtitle={t('itemDetail.subtitle')} />
 
       {error ? (
         <p className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
@@ -106,30 +109,30 @@ export function ItemDetailPage() {
 
       <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
         <Card>
-          <CardTitle>Edit item</CardTitle>
+          <CardTitle>{t('itemDetail.editTitle')}</CardTitle>
           <div className="mt-3">
             <ItemForm
               categories={categories}
               initialItem={item}
-              submitLabel="Save changes"
+              submitLabel={t('itemDetail.save')}
               onSubmit={handleUpdate}
             />
           </div>
           <div className="mt-4">
             <Button variant="danger" onClick={handleDelete}>
-              Delete item
+              {t('itemDetail.delete')}
             </Button>
           </div>
         </Card>
 
         <div className="space-y-4">
           <Card>
-            <CardTitle>Manual status override</CardTitle>
+            <CardTitle>{t('itemDetail.manualTitle')}</CardTitle>
             <CardDescription className="mt-1">
-              Override lifecycle at any point from item details.
+              {t('itemDetail.manualDescription')}
             </CardDescription>
             <div className="mt-3 space-y-2">
-              <Label htmlFor="manual-status">Set status</Label>
+              <Label htmlFor="manual-status">{t('itemDetail.setStatus')}</Label>
               <Select
                 id="manual-status"
                 value={status}
@@ -137,21 +140,21 @@ export function ItemDetailPage() {
               >
                 {STATUS_ORDER.map((statusOption) => (
                   <option key={statusOption} value={statusOption}>
-                    {STATUS_LABEL[statusOption]}
+                    {getLocalizedStatusLabel(statusOption, t)}
                   </option>
                 ))}
               </Select>
               <Button className="w-full" onClick={handleManualStatusChange}>
-                Update status
+                {t('itemDetail.updateStatus')}
               </Button>
             </div>
           </Card>
 
           <Card>
-            <CardTitle>Photos</CardTitle>
+            <CardTitle>{t('itemDetail.photosTitle')}</CardTitle>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {item.photoIds.length === 0 ? (
-                <CardDescription>No photos yet.</CardDescription>
+                <CardDescription>{t('itemDetail.noPhotos')}</CardDescription>
               ) : (
                 item.photoIds.map((photoId) => (
                   <div key={photoId}>
@@ -162,7 +165,7 @@ export function ItemDetailPage() {
                       className="mt-1 w-full"
                       onClick={() => handleDetachPhoto(photoId)}
                     >
-                      Remove
+                      {t('itemDetail.removePhoto')}
                     </Button>
                   </div>
                 ))
@@ -171,15 +174,18 @@ export function ItemDetailPage() {
           </Card>
 
           <Card>
-            <CardTitle>Laundry timeline</CardTitle>
+            <CardTitle>{t('itemDetail.timelineTitle')}</CardTitle>
             <div className="mt-3 space-y-2">
               {logs.length === 0 ? (
-                <CardDescription>No status changes logged yet.</CardDescription>
+                <CardDescription>{t('itemDetail.noLogs')}</CardDescription>
               ) : (
                 logs.map((log) => (
                   <div key={log.id} className="rounded-md border border-slate-200 p-2 text-sm">
                     <p className="font-medium text-slate-800">
-                      {STATUS_LABEL[log.fromStatus]} to {STATUS_LABEL[log.toStatus]}
+                      {t('itemDetail.transition', {
+                        from: getLocalizedStatusLabel(log.fromStatus, t),
+                        to: getLocalizedStatusLabel(log.toStatus, t),
+                      })}
                     </p>
                     <p className="text-xs text-slate-500">{formatDateTime(log.changedAt)}</p>
                   </div>

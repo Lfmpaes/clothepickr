@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useLocale } from '@/app/locale-context'
 import { categoryCreateSchema } from '@/lib/validation/schemas'
 import { categoryRepository, itemRepository } from '@/lib/db'
+import { getLocalizedCategoryName } from '@/lib/i18n/helpers'
 import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
@@ -16,6 +18,7 @@ interface CategoryFormValues {
 }
 
 export function CategoriesPage() {
+  const { t } = useLocale()
   const categories = useLiveQuery(() => categoryRepository.list(true), [], [])
   const items = useLiveQuery(() => itemRepository.list(), [], [])
   const [error, setError] = useState<string>()
@@ -39,8 +42,8 @@ export function CategoriesPage() {
     try {
       await categoryRepository.create(values)
       form.reset()
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Unable to create category.')
+    } catch {
+      setError(t('categories.errorCreate'))
     }
   })
 
@@ -54,8 +57,8 @@ export function CategoriesPage() {
       await categoryRepository.update(editingId, { name: editingName })
       setEditingId(undefined)
       setEditingName('')
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : 'Unable to update category.')
+    } catch {
+      setError(t('categories.errorUpdate'))
     }
   }
 
@@ -67,30 +70,31 @@ export function CategoriesPage() {
       } else {
         await categoryRepository.archive(id)
       }
-    } catch (archiveError) {
-      setError(archiveError instanceof Error ? archiveError.message : 'Unable to update category.')
+    } catch {
+      setError(t('categories.errorArchive'))
     }
   }
 
   return (
     <section>
-      <PageHeader
-        title="Categories"
-        subtitle="Use defaults and custom categories to organize your wardrobe."
-      />
+      <PageHeader title={t('categories.title')} subtitle={t('categories.subtitle')} />
 
       <Card className="mb-4">
-        <CardTitle>Add category</CardTitle>
+        <CardTitle>{t('categories.addTitle')}</CardTitle>
         <form className="mt-3 flex flex-col gap-3 sm:flex-row" onSubmit={handleCreate}>
           <div className="flex-1">
-            <Label htmlFor="category-name">Name</Label>
-            <Input id="category-name" placeholder="Example: Workwear" {...form.register('name')} />
+            <Label htmlFor="category-name">{t('categories.nameLabel')}</Label>
+            <Input
+              id="category-name"
+              placeholder={t('categories.namePlaceholder')}
+              {...form.register('name')}
+            />
             {form.formState.errors.name ? (
               <p className="mt-1 text-xs text-rose-700">{form.formState.errors.name.message}</p>
             ) : null}
           </div>
           <div className="flex items-end">
-            <Button type="submit">Create</Button>
+            <Button type="submit">{t('categories.create')}</Button>
           </div>
         </form>
       </Card>
@@ -114,7 +118,7 @@ export function CategoriesPage() {
                       className="w-52"
                     />
                     <Button size="sm" onClick={handleSaveEdit}>
-                      Save
+                      {t('categories.save')}
                     </Button>
                     <Button
                       size="sm"
@@ -124,25 +128,29 @@ export function CategoriesPage() {
                         setEditingName('')
                       }}
                     >
-                      Cancel
+                      {t('categories.cancel')}
                     </Button>
                   </div>
                 ) : (
                   <CardTitle>
                     <span className="inline-flex items-center gap-2">
                       <CategoryPanelIcon categoryName={category.name} />
-                      {category.name}
+                      {getLocalizedCategoryName(category.name, t)}
                     </span>
                     {category.isDefault ? (
-                      <span className="ml-2 text-xs font-medium text-emerald-700">Default</span>
+                      <span className="ml-2 text-xs font-medium text-emerald-700">
+                        {t('category.default.badge')}
+                      </span>
                     ) : null}
                     {category.archived ? (
-                      <span className="ml-2 text-xs font-medium text-slate-500">Archived</span>
+                      <span className="ml-2 text-xs font-medium text-slate-500">
+                        {t('category.archived.badge')}
+                      </span>
                     ) : null}
                   </CardTitle>
                 )}
                 <CardDescription className="mt-1">
-                  {itemCountByCategory[category.id] ?? 0} linked items
+                  {t('categories.linkedItems', { count: itemCountByCategory[category.id] ?? 0 })}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -155,14 +163,14 @@ export function CategoriesPage() {
                   }}
                   disabled={editingId === category.id}
                 >
-                  Rename
+                  {t('categories.rename')}
                 </Button>
                 <Button
                   size="sm"
                   variant={category.archived ? 'secondary' : 'ghost'}
                   onClick={() => handleToggleArchive(category.id, category.archived)}
                 >
-                  {category.archived ? 'Restore' : 'Archive'}
+                  {category.archived ? t('categories.restore') : t('categories.archive')}
                 </Button>
               </div>
             </div>
