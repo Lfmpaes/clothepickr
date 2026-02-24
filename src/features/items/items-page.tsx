@@ -12,7 +12,7 @@ import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { StatusBadge } from '@/components/status-badge'
 import { useLocale } from '@/app/locale-context'
-import { ITEM_COLOR_VALUES, type ItemColorValue } from '@/lib/colors'
+import { ITEM_COLOR_VALUES, getColorSwatch, type ItemColorValue } from '@/lib/colors'
 import { STATUS_ORDER } from '@/lib/constants'
 import { categoryRepository, itemRepository, statusMachine } from '@/lib/db'
 import {
@@ -127,10 +127,10 @@ export function ItemsPage() {
               value={color}
               onChange={(event) => setColor(event.target.value as 'all' | ItemColorValue)}
             >
-              <option value="all">{t('items.allColors')}</option>
+              <option value="all">◻ {t('items.allColors')}</option>
               {ITEM_COLOR_VALUES.map((value) => (
                 <option key={value || 'none'} value={value}>
-                  {getLocalizedColorLabel(value, t)}
+                  {getColorSwatch(value)} {getLocalizedColorLabel(value, t)}
                 </option>
               ))}
             </Select>

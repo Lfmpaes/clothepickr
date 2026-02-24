@@ -3,7 +3,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useLocale } from '@/app/locale-context'
-import { ITEM_COLOR_VALUES, normalizeItemColor, type ItemColorValue } from '@/lib/colors'
+import {
+  ITEM_COLOR_VALUES,
+  getColorSwatch,
+  normalizeItemColor,
+  type ItemColorValue,
+} from '@/lib/colors'
 import type { Category, ClothingItem, ClothingStatus } from '@/lib/types'
 import { STATUS_ORDER } from '@/lib/constants'
 import {
@@ -141,7 +146,7 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
           <Select id="item-color" {...form.register('color')}>
             {ITEM_COLOR_VALUES.map((colorOption) => (
               <option key={colorOption || 'none'} value={colorOption}>
-                {getLocalizedColorLabel(colorOption, t)}
+                {getColorSwatch(colorOption)} {getLocalizedColorLabel(colorOption, t)}
               </option>
             ))}
           </Select>

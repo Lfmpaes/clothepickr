@@ -83,6 +83,33 @@ export const ITEM_COLOR_LABEL_KEY_BY_VALUE: Record<ItemColorValue, TranslationKe
   cream: 'color.cream',
 }
 
+export const ITEM_COLOR_SWATCH_BY_VALUE: Record<ItemColorValue, string> = {
+  '': '◻',
+  black: '⬛',
+  white: '⬜',
+  gray: '◼',
+  charcoal: '◾',
+  navy: '🟦',
+  blue: '🟦',
+  sky: '🟦',
+  teal: '🟩',
+  green: '🟩',
+  olive: '🟩',
+  lime: '🟩',
+  yellow: '🟨',
+  gold: '🟨',
+  orange: '🟧',
+  coral: '🟧',
+  red: '🟥',
+  burgundy: '🟥',
+  pink: '🟥',
+  purple: '🟪',
+  lavender: '🟪',
+  brown: '🟫',
+  beige: '🟨',
+  cream: '⬜',
+}
+
 export function isItemColorValue(value: string): value is ItemColorValue {
   return ITEM_COLOR_VALUES.includes(value as ItemColorValue)
 }
@@ -92,4 +119,8 @@ export function normalizeItemColor(value: string | undefined | null): ItemColorV
     return ''
   }
   return isItemColorValue(value) ? value : ''
+}
+
+export function getColorSwatch(color: ItemColorValue) {
+  return ITEM_COLOR_SWATCH_BY_VALUE[color]
 }
