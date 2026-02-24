@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DexieCategoryRepository,
   DexieItemRepository,
@@ -80,4 +79,3 @@ describe('dexie repositories', () => {
     expect(recent[0].id).toBe(log.id)
   })
 })
-

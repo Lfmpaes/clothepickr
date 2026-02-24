@@ -1,4 +1,3 @@
-import { describe, expect, it, vi } from 'vitest'
 import { ClothingStatusMachine } from '@/lib/domain/statusMachine'
 
 describe('ClothingStatusMachine', () => {
@@ -79,4 +78,3 @@ describe('ClothingStatusMachine', () => {
     )
   })
 })
-

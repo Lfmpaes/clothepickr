@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest'
 import { clothingItemCreateSchema, outfitCreateSchema } from '@/lib/validation/schemas'
 
 describe('validation schemas', () => {
@@ -32,4 +31,3 @@ describe('validation schemas', () => {
     ).toThrow()
   })
 })
-

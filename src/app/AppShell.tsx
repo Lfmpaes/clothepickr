@@ -6,7 +6,11 @@ import {
   Layers,
   SlidersHorizontal,
   Tags,
+  Moon,
+  Sun,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useTheme } from '@/app/theme-context'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -19,31 +23,47 @@ const navItems = [
 ]
 
 export function AppShell() {
+  const { theme, toggleTheme } = useTheme()
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/95">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/" className="text-lg font-bold tracking-tight text-emerald-800">
+          <Link
+            to="/"
+            className="text-lg font-bold tracking-tight text-emerald-800 dark:text-emerald-300"
+          >
             ClothePickr
           </Link>
-          <nav className="hidden items-center gap-2 md:flex">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    'rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-emerald-100 text-emerald-900'
-                      : 'text-slate-700 hover:bg-slate-100',
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <nav className="hidden items-center gap-2 md:flex">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-100'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800',
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -51,7 +71,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:hidden">
         <div className="grid grid-cols-6">
           {navItems.map((item) => (
             <NavLink
@@ -60,7 +80,7 @@ export function AppShell() {
               className={({ isActive }) =>
                 cn(
                   'flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-medium',
-                  isActive ? 'text-emerald-800' : 'text-slate-500',
+                  isActive ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400',
                 )
               }
             >

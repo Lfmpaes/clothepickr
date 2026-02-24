@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategoriesPage } from '@/features/categories/categories-page'
@@ -15,15 +14,14 @@ describe('CategoriesPage', () => {
     render(<CategoriesPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('Shirts')).toBeInTheDocument()
+      expect(screen.getByText('Shirts')).toBeTruthy()
     })
 
     await user.type(screen.getByLabelText('Name'), 'Workwear')
     await user.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => {
-      expect(screen.getByText('Workwear')).toBeInTheDocument()
+      expect(screen.getByText('Workwear')).toBeTruthy()
     })
   })
 })
-
