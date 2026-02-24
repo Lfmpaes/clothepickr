@@ -5,6 +5,7 @@ import { AppShell } from '@/app/AppShell'
 import { LocaleProvider } from '@/app/locale-provider'
 import { PwaUpdatePrompt } from '@/app/PwaUpdatePrompt'
 import { ThemeProvider } from '@/app/theme-provider'
+import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
 import { initializeDatabase } from '@/lib/db'
 
 const NotFoundPage = lazy(() =>
@@ -13,6 +14,11 @@ const NotFoundPage = lazy(() =>
 const CategoriesPage = lazy(() =>
   import('@/features/categories/categories-page').then((module) => ({
     default: module.CategoriesPage,
+  })),
+)
+const AuthCallbackPage = lazy(() =>
+  import('@/features/auth/auth-callback-page').then((module) => ({
+    default: module.AuthCallbackPage,
   })),
 )
 const DashboardPage = lazy(() =>
@@ -58,7 +64,23 @@ function RouteFallback() {
 
 export default function App() {
   useEffect(() => {
-    void initializeDatabase()
+    let active = true
+
+    const bootstrap = async () => {
+      await initializeDatabase()
+      if (!active) {
+        return
+      }
+
+      await cloudSyncEngine.start()
+    }
+
+    void bootstrap()
+
+    return () => {
+      active = false
+      cloudSyncEngine.stop()
+    }
   }, [])
 
   return (
@@ -67,6 +89,7 @@ export default function App() {
         <BrowserRouter>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<AppShell />}>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/items" element={<ItemsPage />} />

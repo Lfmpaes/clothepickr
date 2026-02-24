@@ -129,6 +129,8 @@ export async function restoreBackupSnapshot(payload: unknown) {
     db.photos.clear(),
     db.outfits.clear(),
     db.laundryLogs.clear(),
+    db.syncMeta.clear(),
+    db.syncQueue.clear(),
   ])
 
   if (snapshot.data.categories.length > 0) {
