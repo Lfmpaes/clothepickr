@@ -10,6 +10,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { BrandLogo } from '@/components/brand-logo'
 import { useTheme } from '@/app/theme-context'
 import { cn } from '@/lib/utils'
 
@@ -31,9 +32,10 @@ export function AppShell() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link
             to="/"
-            className="text-lg font-bold tracking-tight text-emerald-800 dark:text-emerald-300"
+            className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/70"
+            aria-label="Go to ClothePickr home"
           >
-            ClothePickr
+            <BrandLogo compact />
           </Link>
           <div className="flex items-center gap-2">
             <Button

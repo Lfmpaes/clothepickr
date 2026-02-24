@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { AppShell } from '@/app/AppShell'
 import { PwaUpdatePrompt } from '@/app/PwaUpdatePrompt'
 import { ThemeProvider } from '@/app/theme-provider'
@@ -40,6 +41,7 @@ export default function App() {
           </Route>
         </Routes>
         <PwaUpdatePrompt />
+        <Analytics />
       </BrowserRouter>
     </ThemeProvider>
   )
