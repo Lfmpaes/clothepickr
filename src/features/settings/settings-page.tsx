@@ -109,11 +109,12 @@ export function SettingsPage() {
           <Select
             id="language-select"
             value={locale}
-            onChange={(event) => setLocale(event.target.value as Locale)}
-          >
-            <option value="en-US">{t('settings.language.enUS')}</option>
-            <option value="pt-BR">{t('settings.language.ptBR')}</option>
-          </Select>
+            onValueChange={(value) => setLocale(value as Locale)}
+            options={[
+              { value: 'en-US', label: t('settings.language.enUS') },
+              { value: 'pt-BR', label: t('settings.language.ptBR') },
+            ]}
+          />
         </div>
       </Card>
 

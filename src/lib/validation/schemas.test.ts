@@ -22,6 +22,16 @@ describe('validation schemas', () => {
     ).toThrow()
   })
 
+  it('rejects unknown clothing colors', () => {
+    expect(() =>
+      clothingItemCreateSchema.parse({
+        name: 'Oxford Shirt',
+        categoryId: crypto.randomUUID(),
+        color: 'ultraviolet',
+      }),
+    ).toThrow()
+  })
+
   it('requires at least one item for an outfit', () => {
     expect(() =>
       outfitCreateSchema.parse({

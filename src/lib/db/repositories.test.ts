@@ -52,6 +52,7 @@ describe('dexie repositories', () => {
       name: 'Plain Tee',
       categoryId: category.id,
       status: 'dirty',
+      color: 'blue',
     })
     await outfits.create({
       name: 'Casual',
@@ -61,6 +62,7 @@ describe('dexie repositories', () => {
 
     const filtered = await items.list({
       status: 'dirty',
+      color: 'blue',
       favoriteOnly: true,
     })
 

@@ -1,6 +1,8 @@
 import { z } from 'zod'
+import { ITEM_COLOR_VALUES } from '@/lib/colors'
 
 const statusSchema = z.enum(['clean', 'dirty', 'washing', 'drying'])
+const colorSchema = z.enum(ITEM_COLOR_VALUES)
 
 export const categoryCreateSchema = z.object({
   name: z.string().trim().min(2).max(50),
@@ -12,7 +14,7 @@ export const clothingItemCreateSchema = z.object({
   name: z.string().trim().min(2).max(80),
   categoryId: z.string().uuid(),
   status: statusSchema.default('clean'),
-  color: z.string().trim().max(40).optional().default(''),
+  color: colorSchema.optional().default(''),
   brand: z.string().trim().max(40).optional().default(''),
   size: z.string().trim().max(20).optional().default(''),
   notes: z.string().trim().max(500).optional().default(''),
@@ -41,4 +43,3 @@ export const photoUploadSchema = z.object({
 })
 
 export const transitionReasonSchema = z.enum(['manual', 'cycle'])
-

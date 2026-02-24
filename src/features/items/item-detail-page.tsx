@@ -136,14 +136,12 @@ export function ItemDetailPage() {
               <Select
                 id="manual-status"
                 value={status}
-                onChange={(event) => setStatus(event.target.value as ClothingStatus)}
-              >
-                {STATUS_ORDER.map((statusOption) => (
-                  <option key={statusOption} value={statusOption}>
-                    {getLocalizedStatusLabel(statusOption, t)}
-                  </option>
-                ))}
-              </Select>
+                onValueChange={(value) => setStatus(value as ClothingStatus)}
+                options={STATUS_ORDER.map((statusOption) => ({
+                  value: statusOption,
+                  label: getLocalizedStatusLabel(statusOption, t),
+                }))}
+              />
               <Button className="w-full" onClick={handleManualStatusChange}>
                 {t('itemDetail.updateStatus')}
               </Button>
