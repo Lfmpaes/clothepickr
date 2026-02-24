@@ -102,3 +102,49 @@ export interface PhotoUploadInput {
   width: number
   height: number
 }
+
+export type SyncOperation = 'upsert' | 'delete'
+
+export type SyncTableName = 'categories' | 'items' | 'outfits' | 'laundryLogs' | 'photos'
+
+export interface SyncCursor {
+  serverUpdatedAt: string
+  id: ID
+}
+
+export type SyncCursorMap = Partial<Record<SyncTableName, SyncCursor>>
+
+export interface SyncMeta {
+  key: 'cloud'
+  enabled: boolean
+  deviceId: string
+  linkedUserId: string
+  lastSyncedAt: string
+  lastError: string
+  cursors: SyncCursorMap
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SyncQueueEntry {
+  id: ID
+  table: SyncTableName
+  entityId: ID
+  op: SyncOperation
+  changedAt: string
+  retryCount: number
+  nextRetryAt: string
+  lastError: string
+  createdAt: string
+}
+
+export type CloudSyncStatus = 'disabled' | 'idle' | 'syncing' | 'offline' | 'error'
+
+export interface CloudSyncState {
+  enabled: boolean
+  authenticated: boolean
+  status: CloudSyncStatus
+  pendingCount: number
+  lastSyncedAt?: string
+  lastError?: string
+}

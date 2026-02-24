@@ -25,6 +25,14 @@ bun run dev
 
 Open the local URL shown in the terminal (typically `http://localhost:5173`).
 
+### Cloud Sync Setup (Optional)
+Copy `.env.example` to `.env` and set your Supabase values:
+
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+```
+
 ## Scripts 📌
 ```bash
 bun run dev        # start development server
