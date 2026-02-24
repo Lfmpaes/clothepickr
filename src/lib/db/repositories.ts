@@ -27,6 +27,7 @@ import type { ClothePickrDb } from '@/lib/db/schema'
 export interface ItemListFilters {
   categoryId?: string
   status?: ClothingStatus
+  color?: string
   search?: string
   favoriteOnly?: boolean
 }
@@ -168,6 +169,8 @@ export class DexieItemRepository implements ItemRepository {
     const filtered = items.filter((item) => {
       const matchesCategory = filters.categoryId ? item.categoryId === filters.categoryId : true
       const matchesStatus = filters.status ? item.status === filters.status : true
+      const matchesColor =
+        filters.color !== undefined ? item.color === filters.color : true
       const matchesSearch = search
         ? [
             item.name,
@@ -183,7 +186,7 @@ export class DexieItemRepository implements ItemRepository {
         : true
       const matchesFavorite = filters.favoriteOnly ? favoriteIds.has(item.id) : true
 
-      return matchesCategory && matchesStatus && matchesSearch && matchesFavorite
+      return matchesCategory && matchesStatus && matchesColor && matchesSearch && matchesFavorite
     })
 
     return filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))

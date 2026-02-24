@@ -1,5 +1,10 @@
 import type { ClothingStatus, LaundryLog } from '@/lib/types'
 import type { TranslationKey } from '@/lib/i18n/translations'
+import {
+  ITEM_COLOR_HEX_BY_VALUE,
+  ITEM_COLOR_LABEL_KEY_BY_VALUE,
+  isItemColorValue,
+} from '@/lib/colors'
 
 type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string
 
@@ -42,4 +47,22 @@ export function getLocalizedCategoryName(name: string, t: TranslateFn) {
   }
 
   return t(key)
+}
+
+export function getLocalizedColorLabel(color: string, t: TranslateFn) {
+  if (!color) {
+    return t('color.none')
+  }
+  if (isItemColorValue(color)) {
+    return t(ITEM_COLOR_LABEL_KEY_BY_VALUE[color])
+  }
+
+  return color
+}
+
+export function getColorHex(color: string) {
+  if (!isItemColorValue(color)) {
+    return undefined
+  }
+  return ITEM_COLOR_HEX_BY_VALUE[color]
 }

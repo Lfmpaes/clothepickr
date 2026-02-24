@@ -12,9 +12,15 @@ import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { StatusBadge } from '@/components/status-badge'
 import { useLocale } from '@/app/locale-context'
+import { ITEM_COLOR_VALUES, type ItemColorValue } from '@/lib/colors'
 import { STATUS_ORDER } from '@/lib/constants'
 import { categoryRepository, itemRepository, statusMachine } from '@/lib/db'
-import { getLocalizedCategoryName, getLocalizedStatusLabel } from '@/lib/i18n/helpers'
+import {
+  getColorHex,
+  getLocalizedCategoryName,
+  getLocalizedColorLabel,
+  getLocalizedStatusLabel,
+} from '@/lib/i18n/helpers'
 import type { ClothingStatus } from '@/lib/types'
 
 export function ItemsPage() {
@@ -23,6 +29,7 @@ export function ItemsPage() {
   const [search, setSearch] = useState('')
   const [categoryId, setCategoryId] = useState('all')
   const [status, setStatus] = useState<'all' | ClothingStatus>('all')
+  const [color, setColor] = useState<'all' | ItemColorValue>('all')
   const [favoriteOnly, setFavoriteOnly] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -32,9 +39,10 @@ export function ItemsPage() {
         search,
         categoryId: categoryId === 'all' ? undefined : categoryId,
         status: status === 'all' ? undefined : status,
+        color: color === 'all' ? undefined : color,
         favoriteOnly,
       }),
-    [search, categoryId, status, favoriteOnly],
+    [search, categoryId, status, color, favoriteOnly],
     [],
   )
 
@@ -72,7 +80,7 @@ export function ItemsPage() {
       />
 
       <Card className="mb-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <Label htmlFor="item-search">{t('items.searchLabel')}</Label>
             <Input
@@ -108,6 +116,21 @@ export function ItemsPage() {
               {STATUS_ORDER.map((value) => (
                 <option key={value} value={value}>
                   {getLocalizedStatusLabel(value, t)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="item-color-filter">{t('items.colorLabel')}</Label>
+            <Select
+              id="item-color-filter"
+              value={color}
+              onChange={(event) => setColor(event.target.value as 'all' | ItemColorValue)}
+            >
+              <option value="all">{t('items.allColors')}</option>
+              {ITEM_COLOR_VALUES.map((value) => (
+                <option key={value || 'none'} value={value}>
+                  {getLocalizedColorLabel(value, t)}
                 </option>
               ))}
             </Select>
@@ -154,6 +177,15 @@ export function ItemsPage() {
                   </CardDescription>
                   <div className="mt-2 flex items-center gap-2">
                     <StatusBadge status={item.status} />
+                    {item.color ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full border border-slate-300"
+                          style={{ backgroundColor: getColorHex(item.color) ?? '#CBD5E1' }}
+                        />
+                        {getLocalizedColorLabel(item.color, t)}
+                      </span>
+                    ) : null}
                     {item.brand ? <span className="text-xs text-slate-500">{item.brand}</span> : null}
                   </div>
                 </div>

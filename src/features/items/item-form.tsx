@@ -3,9 +3,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useLocale } from '@/app/locale-context'
+import { ITEM_COLOR_VALUES, normalizeItemColor, type ItemColorValue } from '@/lib/colors'
 import type { Category, ClothingItem, ClothingStatus } from '@/lib/types'
 import { STATUS_ORDER } from '@/lib/constants'
-import { getLocalizedCategoryName, getLocalizedStatusLabel } from '@/lib/i18n/helpers'
+import {
+  getLocalizedCategoryName,
+  getLocalizedColorLabel,
+  getLocalizedStatusLabel,
+} from '@/lib/i18n/helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,7 +21,7 @@ const itemFormSchema = z.object({
   name: z.string().trim().min(2).max(80),
   categoryId: z.string().uuid(),
   status: z.enum(['clean', 'dirty', 'washing', 'drying']),
-  color: z.string().trim().max(40),
+  color: z.enum(ITEM_COLOR_VALUES),
   brand: z.string().trim().max(40),
   size: z.string().trim().max(20),
   notes: z.string().trim().max(500),
@@ -28,7 +33,7 @@ interface ItemFormValues {
   name: string
   categoryId: string
   status: ClothingStatus
-  color: string
+  color: ItemColorValue
   brand: string
   size: string
   notes: string
@@ -51,7 +56,7 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
       name: initialItem?.name ?? '',
       categoryId: initialItem?.categoryId ?? categories[0]?.id ?? '',
       status: initialItem?.status ?? 'clean',
-      color: initialItem?.color ?? '',
+      color: normalizeItemColor(initialItem?.color),
       brand: initialItem?.brand ?? '',
       size: initialItem?.size ?? '',
       notes: initialItem?.notes ?? '',
@@ -65,7 +70,7 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
       name: initialItem?.name ?? '',
       categoryId: initialItem?.categoryId ?? categories[0]?.id ?? '',
       status: initialItem?.status ?? 'clean',
-      color: initialItem?.color ?? '',
+      color: normalizeItemColor(initialItem?.color),
       brand: initialItem?.brand ?? '',
       size: initialItem?.size ?? '',
       notes: initialItem?.notes ?? '',
@@ -133,7 +138,13 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
 
         <div>
           <Label htmlFor="item-color">{t('itemForm.colorLabel')}</Label>
-          <Input id="item-color" {...form.register('color')} />
+          <Select id="item-color" {...form.register('color')}>
+            {ITEM_COLOR_VALUES.map((colorOption) => (
+              <option key={colorOption || 'none'} value={colorOption}>
+                {getLocalizedColorLabel(colorOption, t)}
+              </option>
+            ))}
+          </Select>
         </div>
         <div>
           <Label htmlFor="item-brand">{t('itemForm.brandLabel')}</Label>
