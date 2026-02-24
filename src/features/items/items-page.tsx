@@ -8,11 +8,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
+import { ColorSwatch } from '@/components/color-swatch'
 import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { StatusBadge } from '@/components/status-badge'
 import { useLocale } from '@/app/locale-context'
-import { ITEM_COLOR_VALUES, getColorSwatch, type ItemColorValue } from '@/lib/colors'
+import { ITEM_COLOR_VALUES, type ItemColorValue } from '@/lib/colors'
 import { STATUS_ORDER } from '@/lib/constants'
 import { categoryRepository, itemRepository, statusMachine } from '@/lib/db'
 import {
@@ -95,45 +96,46 @@ export function ItemsPage() {
             <Select
               id="item-category-filter"
               value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-            >
-              <option value="all">{t('items.allCategories')}</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {getLocalizedCategoryName(category.name, t)}
-                </option>
-              ))}
-            </Select>
+              onValueChange={setCategoryId}
+              options={[
+                { value: 'all', label: t('items.allCategories') },
+                ...categories.map((category) => ({
+                  value: category.id,
+                  label: getLocalizedCategoryName(category.name, t),
+                })),
+              ]}
+            />
           </div>
           <div>
             <Label htmlFor="item-status-filter">{t('items.statusLabel')}</Label>
             <Select
               id="item-status-filter"
               value={status}
-              onChange={(event) => setStatus(event.target.value as 'all' | ClothingStatus)}
-            >
-              <option value="all">{t('items.allStatuses')}</option>
-              {STATUS_ORDER.map((value) => (
-                <option key={value} value={value}>
-                  {getLocalizedStatusLabel(value, t)}
-                </option>
-              ))}
-            </Select>
+              onValueChange={(value) => setStatus(value as 'all' | ClothingStatus)}
+              options={[
+                { value: 'all', label: t('items.allStatuses') },
+                ...STATUS_ORDER.map((value) => ({
+                  value,
+                  label: getLocalizedStatusLabel(value, t),
+                })),
+              ]}
+            />
           </div>
           <div>
             <Label htmlFor="item-color-filter">{t('items.colorLabel')}</Label>
             <Select
               id="item-color-filter"
               value={color}
-              onChange={(event) => setColor(event.target.value as 'all' | ItemColorValue)}
-            >
-              <option value="all">◻ {t('items.allColors')}</option>
-              {ITEM_COLOR_VALUES.map((value) => (
-                <option key={value || 'none'} value={value}>
-                  {getColorSwatch(value)} {getLocalizedColorLabel(value, t)}
-                </option>
-              ))}
-            </Select>
+              onValueChange={(value) => setColor(value as 'all' | ItemColorValue)}
+              options={[
+                { value: 'all', label: t('items.allColors'), icon: <ColorSwatch rainbow /> },
+                ...ITEM_COLOR_VALUES.map((value) => ({
+                  value,
+                  label: getLocalizedColorLabel(value, t),
+                  icon: value ? <ColorSwatch color={getColorHex(value)} /> : undefined,
+                })),
+              ]}
+            />
           </div>
           <div className="flex items-end gap-2">
             <Checkbox

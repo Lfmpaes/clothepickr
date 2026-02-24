@@ -1,21 +1,22 @@
 import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { useLocale } from '@/app/locale-context'
 import {
   ITEM_COLOR_VALUES,
-  getColorSwatch,
   normalizeItemColor,
   type ItemColorValue,
 } from '@/lib/colors'
 import type { Category, ClothingItem, ClothingStatus } from '@/lib/types'
 import { STATUS_ORDER } from '@/lib/constants'
 import {
+  getColorHex,
   getLocalizedCategoryName,
   getLocalizedColorLabel,
   getLocalizedStatusLabel,
 } from '@/lib/i18n/helpers'
+import { ColorSwatch } from '@/components/color-swatch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -121,35 +122,60 @@ export function ItemForm({ categories, initialItem, submitLabel, onSubmit }: Ite
 
         <div>
           <Label htmlFor="item-category">{t('itemForm.categoryLabel')}</Label>
-          <Select id="item-category" {...form.register('categoryId')}>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {getLocalizedCategoryName(category.name, t)}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={form.control}
+            name="categoryId"
+            render={({ field }) => (
+              <Select
+                id="item-category"
+                value={field.value}
+                onValueChange={field.onChange}
+                options={categories.map((category) => ({
+                  value: category.id,
+                  label: getLocalizedCategoryName(category.name, t),
+                }))}
+              />
+            )}
+          />
         </div>
 
         <div>
           <Label htmlFor="item-status">{t('itemForm.statusLabel')}</Label>
-          <Select id="item-status" {...form.register('status')}>
-            {STATUS_ORDER.map((status) => (
-              <option key={status} value={status}>
-                {getLocalizedStatusLabel(status, t)}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <Select
+                id="item-status"
+                value={field.value}
+                onValueChange={field.onChange}
+                options={STATUS_ORDER.map((status) => ({
+                  value: status,
+                  label: getLocalizedStatusLabel(status, t),
+                }))}
+              />
+            )}
+          />
         </div>
 
         <div>
           <Label htmlFor="item-color">{t('itemForm.colorLabel')}</Label>
-          <Select id="item-color" {...form.register('color')}>
-            {ITEM_COLOR_VALUES.map((colorOption) => (
-              <option key={colorOption || 'none'} value={colorOption}>
-                {getColorSwatch(colorOption)} {getLocalizedColorLabel(colorOption, t)}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={form.control}
+            name="color"
+            render={({ field }) => (
+              <Select
+                id="item-color"
+                value={field.value}
+                onValueChange={field.onChange}
+                options={ITEM_COLOR_VALUES.map((colorOption) => ({
+                  value: colorOption,
+                  label: getLocalizedColorLabel(colorOption, t),
+                  icon: colorOption ? <ColorSwatch color={getColorHex(colorOption)} /> : undefined,
+                }))}
+              />
+            )}
+          />
         </div>
         <div>
           <Label htmlFor="item-brand">{t('itemForm.brandLabel')}</Label>
