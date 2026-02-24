@@ -71,7 +71,7 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:hidden">
+      <nav className="safe-area-bottom-padding fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:hidden">
         <div className="grid grid-cols-6">
           {navItems.map((item) => (
             <NavLink
@@ -91,7 +91,7 @@ export function AppShell() {
         </div>
       </nav>
 
-      <div className="h-16 md:hidden" />
+      <div className="safe-area-bottom-offset md:hidden" />
     </div>
   )
 }
