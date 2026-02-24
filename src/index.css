@@ -118,3 +118,15 @@ a {
 .safe-area-bottom-offset {
   height: calc(4rem + var(--safe-area-inset-bottom));
 }
+
+@media (max-width: 768px) {
+  * {
+    scrollbar-width: none;
+  }
+
+  *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+}
