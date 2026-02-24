@@ -1,58 +1,38 @@
-# ClothePickr
+# ClothePickr 👕
 
-ClothePickr is a mobile-ready wardrobe manager built with React, Vite, TypeScript, Tailwind, and shadcn-style UI components.  
-It supports offline local data storage with IndexedDB and PWA installability.
+ClothePickr is a mobile-ready wardrobe management PWA focused on cataloging clothes, tracking laundry status, and building favorite outfits.
 
-## Features
-- Clothing catalog with categories (default + custom).
-- Laundry lifecycle tracking: `clean -> dirty -> washing -> drying -> clean`.
-- Manual status override from item details.
-- Outfit/style builder with flexible item combinations.
-- Favorite outfit management and dirty-item warnings.
-- Optional local photo uploads for clothing items.
-- Laundry board with batch transitions and timeline logs.
+## Highlights ✨
+- Category-based clothing catalog (default + custom categories)
+- Laundry lifecycle tracking: `clean -> dirty -> washing -> drying -> clean`
+- Favorite outfit/style builder across categories
+- Optional local photo storage per item
+- Offline-first local persistence with IndexedDB
+- Dark mode + local backup/restore
 
-## Stack
+## Tech Stack 🛠️
 - Bun-compatible project setup
-- Vite + React + TypeScript
-- Tailwind CSS + shadcn-style component architecture
-- Dexie (IndexedDB)
-- React Hook Form + Zod
-- Vitest + React Testing Library
-- Playwright E2E
-- vite-plugin-pwa
+- React + TypeScript + Vite
+- Tailwind CSS + shadcn-style components
+- Dexie (IndexedDB), React Hook Form, Zod
+- Vitest + React Testing Library + Playwright
 
-## Commands
-```bash
-npm install
-npm run dev
-npm run typecheck
-npm run lint
-npm run test
-npm run test:e2e
-npm run build
-```
-
-If Bun is installed, you can run the equivalent Bun commands:
+## Quick Start 🚀
 ```bash
 bun install
 bun run dev
-bun run typecheck
-bun run lint
-bun run test
-bun run test:e2e
-bun run build
 ```
 
-## Routes
-- `/` dashboard
-- `/items` item list + filters
-- `/items/new` create item
-- `/items/:id` item details/edit/status/photo/logs
-- `/categories` category management
-- `/outfits` outfit list
-- `/outfits/new` create outfit
-- `/outfits/:id` edit outfit
-- `/laundry` status board + batch moves
-- `/settings` local data reset
+Open the local URL shown in the terminal (typically `http://localhost:5173`).
 
+## Scripts 📌
+```bash
+bun run dev        # start development server
+bun run typecheck  # run TypeScript checks
+bun run lint       # run ESLint
+bun run test       # run unit/integration tests
+bun run test:e2e   # run Playwright E2E tests
+bun run build      # create production build
+```
+
+Fallback (if Bun is unavailable): `npm install` and `npm run <script>`.
