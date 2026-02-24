@@ -94,7 +94,8 @@ a {
 }
 
 .select-scrollbar {
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .select-scrollbar::-webkit-scrollbar {
@@ -102,7 +103,7 @@ a {
 }
 
 .select-scrollbar::-webkit-scrollbar-track {
-  margin-block: 4px;
+  margin: 4px 2px;
 }
 
 .select-scrollbar::-webkit-scrollbar-thumb {
