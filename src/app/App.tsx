@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
 import { AppShell } from '@/app/AppShell'
+import { LocaleProvider } from '@/app/locale-provider'
 import { PwaUpdatePrompt } from '@/app/PwaUpdatePrompt'
 import { ThemeProvider } from '@/app/theme-provider'
 import { NotFoundPage } from '@/app/pages/not-found'
@@ -22,27 +23,29 @@ export default function App() {
   }, [])
 
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/items" element={<ItemsPage />} />
-            <Route path="/items/new" element={<ItemNewPage />} />
-            <Route path="/items/:id" element={<ItemDetailPage />} />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/outfits" element={<OutfitsPage />} />
-            <Route path="/outfits/new" element={<OutfitEditorPage />} />
-            <Route path="/outfits/:id" element={<OutfitEditorPage />} />
-            <Route path="/laundry" element={<LaundryPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/home" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        </Routes>
-        <PwaUpdatePrompt />
-        <Analytics />
-      </BrowserRouter>
-    </ThemeProvider>
+    <LocaleProvider>
+      <ThemeProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/items" element={<ItemsPage />} />
+              <Route path="/items/new" element={<ItemNewPage />} />
+              <Route path="/items/:id" element={<ItemDetailPage />} />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/outfits" element={<OutfitsPage />} />
+              <Route path="/outfits/new" element={<OutfitEditorPage />} />
+              <Route path="/outfits/:id" element={<OutfitEditorPage />} />
+              <Route path="/laundry" element={<LaundryPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/home" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+          </Routes>
+          <PwaUpdatePrompt />
+          <Analytics />
+        </BrowserRouter>
+      </ThemeProvider>
+    </LocaleProvider>
   )
 }

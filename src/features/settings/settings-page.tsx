@@ -1,13 +1,18 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { Moon, Sun, Upload } from 'lucide-react'
+import { useLocale } from '@/app/locale-context'
 import { useTheme } from '@/app/theme-context'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import { createBackupSnapshot, resetDatabase, restoreBackupSnapshot } from '@/lib/db'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import type { Locale } from '@/lib/i18n/translations'
 
 export function SettingsPage() {
+  const { locale, setLocale, t } = useLocale()
   const { theme, toggleTheme } = useTheme()
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
@@ -19,14 +24,14 @@ export function SettingsPage() {
     setError(undefined)
     setMessage(undefined)
     const confirmed = window.confirm(
-      'Reset all local ClothePickr data? This cannot be undone.',
+      t('settings.confirm.reset'),
     )
     if (!confirmed) {
       return
     }
 
     await resetDatabase()
-    setMessage('Local data reset complete.')
+    setMessage(t('settings.message.resetDone'))
   }
 
   const handleExport = async () => {
@@ -50,9 +55,9 @@ export function SettingsPage() {
       document.body.removeChild(anchor)
       URL.revokeObjectURL(url)
 
-      setMessage('Backup file downloaded.')
+      setMessage(t('settings.message.backupDone'))
     } catch (backupError) {
-      setError(backupError instanceof Error ? backupError.message : 'Could not create backup.')
+      setError(backupError instanceof Error ? backupError.message : t('settings.error.backup'))
     } finally {
       setIsExporting(false)
     }
@@ -76,16 +81,16 @@ export function SettingsPage() {
       const rawText = await file.text()
       const parsed = JSON.parse(rawText) as unknown
       const confirmed = window.confirm(
-        'Restore this backup now? Current local data will be replaced.',
+        t('settings.confirm.restore'),
       )
       if (!confirmed) {
         return
       }
 
       await restoreBackupSnapshot(parsed)
-      setMessage('Backup restored successfully.')
+      setMessage(t('settings.message.restoreDone'))
     } catch (restoreError) {
-      setError(restoreError instanceof Error ? restoreError.message : 'Could not restore backup.')
+      setError(restoreError instanceof Error ? restoreError.message : t('settings.error.restore'))
     } finally {
       setIsImporting(false)
       event.target.value = ''
@@ -94,38 +99,50 @@ export function SettingsPage() {
 
   return (
     <section>
-      <PageHeader title="Settings" subtitle="Manage local app data and environment info." />
+      <PageHeader title={t('settings.title')} subtitle={t('settings.subtitle')} />
 
       <Card className="mb-4">
-        <CardTitle>Theme</CardTitle>
-        <CardDescription className="mt-1">
-          Toggle between light and dark mode.
-        </CardDescription>
+        <CardTitle>{t('settings.language.title')}</CardTitle>
+        <CardDescription className="mt-1">{t('settings.language.description')}</CardDescription>
+        <div className="mt-3 max-w-xs">
+          <Label htmlFor="language-select">{t('settings.language.label')}</Label>
+          <Select
+            id="language-select"
+            value={locale}
+            onChange={(event) => setLocale(event.target.value as Locale)}
+          >
+            <option value="en-US">{t('settings.language.enUS')}</option>
+            <option value="pt-BR">{t('settings.language.ptBR')}</option>
+          </Select>
+        </div>
+      </Card>
+
+      <Card className="mb-4">
+        <CardTitle>{t('settings.theme.title')}</CardTitle>
+        <CardDescription className="mt-1">{t('settings.theme.description')}</CardDescription>
         <Button className="mt-3" variant="outline" onClick={toggleTheme}>
           {theme === 'dark' ? (
             <>
-              <Sun className="mr-2 h-4 w-4" /> Switch to light mode
+              <Sun className="mr-2 h-4 w-4" /> {t('settings.theme.toLight')}
             </>
           ) : (
             <>
-              <Moon className="mr-2 h-4 w-4" /> Switch to dark mode
+              <Moon className="mr-2 h-4 w-4" /> {t('settings.theme.toDark')}
             </>
           )}
         </Button>
       </Card>
 
       <Card className="mb-4">
-        <CardTitle>Backup and restore</CardTitle>
-        <CardDescription className="mt-1">
-          Export your local IndexedDB data to JSON and restore it later on this device.
-        </CardDescription>
+        <CardTitle>{t('settings.backup.title')}</CardTitle>
+        <CardDescription className="mt-1">{t('settings.backup.description')}</CardDescription>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="outline" onClick={handleExport} disabled={isExporting}>
-            {isExporting ? 'Preparing backup...' : 'Download backup'}
+            {isExporting ? t('settings.backup.preparing') : t('settings.backup.download')}
           </Button>
           <Button variant="secondary" onClick={handleRestoreFilePick} disabled={isImporting}>
             <Upload className="mr-2 h-4 w-4" />
-            {isImporting ? 'Restoring...' : 'Restore backup'}
+            {isImporting ? t('settings.backup.restoring') : t('settings.backup.restore')}
           </Button>
           <Input
             ref={restoreInputRef}
@@ -138,12 +155,10 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardTitle>Local storage</CardTitle>
-        <CardDescription className="mt-1">
-          ClothePickr v1 stores all information in your browser IndexedDB.
-        </CardDescription>
+        <CardTitle>{t('settings.storage.title')}</CardTitle>
+        <CardDescription className="mt-1">{t('settings.storage.description')}</CardDescription>
         <Button className="mt-3" variant="danger" onClick={handleReset}>
-          Reset all local data
+          {t('settings.storage.reset')}
         </Button>
       </Card>
 

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
+import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PhotoThumbnail } from '@/components/photo-thumbnail'
 import { StatusBadge } from '@/components/status-badge'
 import { STATUS_LABEL, STATUS_ORDER } from '@/lib/constants'
@@ -139,7 +140,8 @@ export function ItemsPage() {
                 ) : null}
                 <div className="min-w-0 flex-1">
                   <CardTitle className="truncate">{item.name}</CardTitle>
-                  <CardDescription className="mt-1">
+                  <CardDescription className="mt-1 inline-flex items-center gap-1">
+                    <CategoryPanelIcon categoryName={categoryNameById[item.categoryId] ?? 'Category'} />
                     {categoryNameById[item.categoryId] ?? 'Unknown category'}
                   </CardDescription>
                   <div className="mt-2 flex items-center gap-2">
@@ -169,4 +171,3 @@ export function ItemsPage() {
     </section>
   )
 }
-

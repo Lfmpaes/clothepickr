@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { PageHeader } from '@/components/page-header'
+import { StatusPanelIcon } from '@/components/status-panel-icon'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { STATUS_LABEL, STATUS_ORDER } from '@/lib/constants'
@@ -65,7 +66,10 @@ export function LaundryPage() {
         {byStatus.map((column) => (
           <Card key={column.status}>
             <div className="flex items-center justify-between gap-2">
-              <CardTitle>{STATUS_LABEL[column.status]}</CardTitle>
+              <div className="flex items-center gap-2">
+                <StatusPanelIcon status={column.status} />
+                <CardTitle>{STATUS_LABEL[column.status]}</CardTitle>
+              </div>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">
                 {column.items.length}
               </span>
@@ -122,4 +126,3 @@ export function LaundryPage() {
     </section>
   )
 }
-

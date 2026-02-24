@@ -11,20 +11,21 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BrandLogo } from '@/components/brand-logo'
+import { useLocale } from '@/app/locale-context'
 import { useTheme } from '@/app/theme-context'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { to: '/', label: 'Home', icon: Shirt },
-  { to: '/items', label: 'Items', icon: Layers },
-  { to: '/categories', label: 'Categories', icon: Tags },
-  { to: '/outfits', label: 'Outfits', icon: Sparkles },
-  { to: '/laundry', label: 'Laundry', icon: WashingMachine },
-  { to: '/settings', label: 'Settings', icon: SlidersHorizontal },
-]
-
 export function AppShell() {
   const { theme, toggleTheme } = useTheme()
+  const { t } = useLocale()
+  const navItems = [
+    { to: '/', label: t('nav.home'), icon: Shirt },
+    { to: '/items', label: t('nav.items'), icon: Layers },
+    { to: '/categories', label: t('nav.categories'), icon: Tags },
+    { to: '/outfits', label: t('nav.outfits'), icon: Sparkles },
+    { to: '/laundry', label: t('nav.laundry'), icon: WashingMachine },
+    { to: '/settings', label: t('nav.settings'), icon: SlidersHorizontal },
+  ]
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -42,8 +43,8 @@ export function AppShell() {
               variant="outline"
               size="icon"
               onClick={toggleTheme}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label={theme === 'dark' ? t('theme.switchToLight') : t('theme.switchToDark')}
+              title={theme === 'dark' ? t('theme.switchToLight') : t('theme.switchToDark')}
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

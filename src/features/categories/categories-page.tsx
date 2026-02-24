@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { categoryCreateSchema } from '@/lib/validation/schemas'
 import { categoryRepository, itemRepository } from '@/lib/db'
+import { CategoryPanelIcon } from '@/components/category-panel-icon'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
@@ -128,7 +129,10 @@ export function CategoriesPage() {
                   </div>
                 ) : (
                   <CardTitle>
-                    {category.name}
+                    <span className="inline-flex items-center gap-2">
+                      <CategoryPanelIcon categoryName={category.name} />
+                      {category.name}
+                    </span>
                     {category.isDefault ? (
                       <span className="ml-2 text-xs font-medium text-emerald-700">Default</span>
                     ) : null}
@@ -168,4 +172,3 @@ export function CategoriesPage() {
     </section>
   )
 }
-
