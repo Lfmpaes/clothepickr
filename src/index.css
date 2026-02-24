@@ -17,11 +17,11 @@ body,
 
 :root {
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-  --scrollbar-size: 10px;
-  --scrollbar-thumb: linear-gradient(180deg, #22c55e, #14b8a6);
-  --scrollbar-thumb-hover: linear-gradient(180deg, #16a34a, #0d9488);
-  --scrollbar-thumb-active: linear-gradient(180deg, #15803d, #0f766e);
-  --scrollbar-track: rgba(15, 23, 42, 0.08);
+  --scrollbar-size: 12px;
+  --scrollbar-thumb: linear-gradient(180deg, #0f766e, #155e75);
+  --scrollbar-thumb-hover: linear-gradient(180deg, #0d9488, #0e7490);
+  --scrollbar-thumb-active: linear-gradient(180deg, #0f766e, #155e75);
+  --scrollbar-track: rgba(15, 23, 42, 0.14);
   --scrollbar-border: rgba(248, 250, 252, 0.85);
 }
 
@@ -44,9 +44,9 @@ body {
 }
 
 .dark {
-  --scrollbar-thumb: linear-gradient(180deg, #34d399, #22d3ee);
-  --scrollbar-thumb-hover: linear-gradient(180deg, #10b981, #06b6d4);
-  --scrollbar-thumb-active: linear-gradient(180deg, #059669, #0891b2);
+  --scrollbar-thumb: linear-gradient(180deg, #0d9488, #155e75);
+  --scrollbar-thumb-hover: linear-gradient(180deg, #14b8a6, #0e7490);
+  --scrollbar-thumb-active: linear-gradient(180deg, #0f766e, #155e75);
   --scrollbar-track: rgba(148, 163, 184, 0.14);
   --scrollbar-border: rgba(2, 6, 23, 0.9);
 }
@@ -91,6 +91,23 @@ a {
 
 *::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+.select-scrollbar {
+  scrollbar-gutter: stable both-edges;
+}
+
+.select-scrollbar::-webkit-scrollbar {
+  width: 12px;
+}
+
+.select-scrollbar::-webkit-scrollbar-track {
+  margin-block: 4px;
+}
+
+.select-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .safe-area-bottom-padding {

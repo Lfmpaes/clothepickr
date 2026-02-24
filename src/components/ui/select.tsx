@@ -92,7 +92,7 @@ export function Select({
       {open ? (
         <div
           role="listbox"
-          className="absolute z-40 mt-1 max-h-60 w-full overflow-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="select-scrollbar absolute z-40 mt-1 max-h-60 w-full overflow-y-auto overflow-x-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         >
           {options.map((option) => {
             const isSelected = option.value === value
