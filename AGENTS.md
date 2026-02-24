@@ -63,7 +63,7 @@ ClothePickr is a mobile-ready web app for personal wardrobe management.
 - No direct IndexedDB calls from React components.
 - Validate all write operations with zod.
 - Keep state transitions centralized in a domain service.
-- Commit and push to branch dev after successfull implementation using git commit message standards.
+- After finalizing an implementation, suggest a commit message
 
 ## Commands
 - Install deps: `bun install`
