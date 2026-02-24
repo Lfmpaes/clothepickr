@@ -137,13 +137,15 @@ export function ItemsPage() {
               ]}
             />
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex items-start gap-2 pt-6">
             <Checkbox
               id="item-favorites-filter"
               checked={favoriteOnly}
               onChange={(event) => setFavoriteOnly(event.target.checked)}
             />
-            <Label htmlFor="item-favorites-filter">{t('items.favoriteFilter')}</Label>
+            <Label htmlFor="item-favorites-filter" className="leading-tight">
+              {t('items.favoriteFilter')}
+            </Label>
           </div>
         </div>
       </Card>
