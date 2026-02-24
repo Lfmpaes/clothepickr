@@ -73,7 +73,7 @@ export function LaundryPage() {
                 <StatusPanelIcon status={column.status} />
                 <CardTitle>{getLocalizedStatusLabel(column.status, t)}</CardTitle>
               </div>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-100">
                 {column.items.length}
               </span>
             </div>

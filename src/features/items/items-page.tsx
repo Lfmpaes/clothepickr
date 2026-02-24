@@ -137,15 +137,18 @@ export function ItemsPage() {
               ]}
             />
           </div>
-          <div className="flex items-start gap-2 pt-6">
-            <Checkbox
-              id="item-favorites-filter"
-              checked={favoriteOnly}
-              onChange={(event) => setFavoriteOnly(event.target.checked)}
-            />
-            <Label htmlFor="item-favorites-filter" className="leading-tight">
-              {t('items.favoriteFilter')}
-            </Label>
+          <div className="flex flex-col">
+            <span className="invisible text-sm font-medium select-none">{t('items.colorLabel')}</span>
+            <div className="flex h-10 items-center gap-2">
+              <Checkbox
+                id="item-favorites-filter"
+                checked={favoriteOnly}
+                onChange={(event) => setFavoriteOnly(event.target.checked)}
+              />
+              <Label htmlFor="item-favorites-filter" className="leading-tight">
+                {t('items.favoriteFilter')}
+              </Label>
+            </div>
           </div>
         </div>
       </Card>
