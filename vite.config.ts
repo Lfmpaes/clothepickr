@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['clothepickr-icon.svg'],
       manifest: {
         name: 'ClothePickr',
         short_name: 'ClothePickr',
@@ -20,13 +20,13 @@ export default defineConfig({
         scope: '/',
         icons: [
           {
-            src: '/vite.svg',
+            src: '/clothepickr-icon.svg',
             sizes: '192x192',
             type: 'image/svg+xml',
             purpose: 'any',
           },
           {
-            src: '/vite.svg',
+            src: '/clothepickr-icon.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
             purpose: 'any',
