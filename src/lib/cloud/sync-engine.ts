@@ -46,7 +46,7 @@ import {
   resetCloudSyncState,
   subscribeCloudSyncState,
 } from '@/lib/cloud/sync-state-store'
-import { db, itemRepository } from '@/lib/db'
+import { db, itemRepository, reconcileDefaultCategories } from '@/lib/db'
 import type {
   CloudSyncStatus,
   SyncCursor,
@@ -432,6 +432,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
 
     await this.pushQueue(supabase, user.id)
     await this.pullRemoteChanges(supabase, user.id)
+    await reconcileDefaultCategories()
 
     const syncedAt = nowIso()
     await patchSyncMeta({

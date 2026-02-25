@@ -1,4 +1,4 @@
-import { DEFAULT_CATEGORIES } from '@/lib/constants'
+import { DEFAULT_CATEGORY_DEFINITIONS } from '@/lib/constants'
 import { ClothingStatusMachine } from '@/lib/domain/statusMachine'
 import {
   DexieCategoryRepository,
@@ -21,28 +21,93 @@ export const statusMachine = new ClothingStatusMachine(itemRepository, laundryRe
 
 let initialized = false
 
+function normalizeCategoryName(name: string) {
+  return name.trim().toLowerCase()
+}
+
+function compareCategoryAge(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }) {
+  const createdAtSort = a.createdAt.localeCompare(b.createdAt)
+  if (createdAtSort !== 0) {
+    return createdAtSort
+  }
+
+  return a.id.localeCompare(b.id)
+}
+
+export async function reconcileDefaultCategories() {
+  await db.transaction('rw', db.categories, db.items, async () => {
+    const existingCategories = await db.categories.toArray()
+    const categoriesById = new Map(existingCategories.map((category) => [category.id, category]))
+    const remaps = new Map<string, string>()
+    const duplicateIds = new Set<string>()
+    const now = new Date().toISOString()
+
+    for (const definition of DEFAULT_CATEGORY_DEFINITIONS) {
+      const normalizedDefaultName = normalizeCategoryName(definition.name)
+      const nameMatches = existingCategories
+        .filter(
+          (category) =>
+            category.isDefault && normalizeCategoryName(category.name) === normalizedDefaultName,
+        )
+        .sort(compareCategoryAge)
+
+      const stableCategory = categoriesById.get(definition.id)
+      if (!stableCategory) {
+        const source = nameMatches[0]
+        const canonical = source
+          ? {
+              ...source,
+              id: definition.id,
+              isDefault: true,
+            }
+          : {
+              id: definition.id,
+              name: definition.name,
+              isDefault: true,
+              archived: false,
+              createdAt: now,
+              updatedAt: now,
+            }
+
+        await db.categories.put(canonical)
+        categoriesById.set(canonical.id, canonical)
+      } else if (!stableCategory.isDefault) {
+        await db.categories.put({
+          ...stableCategory,
+          isDefault: true,
+          updatedAt: now,
+        })
+      }
+
+      for (const duplicate of nameMatches) {
+        if (duplicate.id === definition.id) {
+          continue
+        }
+        remaps.set(duplicate.id, definition.id)
+        duplicateIds.add(duplicate.id)
+      }
+    }
+
+    for (const [sourceCategoryId, targetCategoryId] of remaps) {
+      await db.items.where('categoryId').equals(sourceCategoryId).modify((item) => {
+        item.categoryId = targetCategoryId
+        item.updatedAt = now
+      })
+    }
+
+    if (duplicateIds.size > 0) {
+      await db.categories.bulkDelete([...duplicateIds])
+    }
+  })
+}
+
 export async function initializeDatabase() {
   if (initialized) {
     return
   }
 
   initialized = true
-  const categoryCount = await db.categories.count()
-  if (categoryCount > 0) {
-    return
-  }
-
-  const now = new Date().toISOString()
-  await db.categories.bulkAdd(
-    DEFAULT_CATEGORIES.map((name) => ({
-      id: crypto.randomUUID(),
-      name,
-      isDefault: true,
-      archived: false,
-      createdAt: now,
-      updatedAt: now,
-    })),
-  )
+  await reconcileDefaultCategories()
 }
 
 export async function resetDatabase() {
