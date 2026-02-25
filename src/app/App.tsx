@@ -5,6 +5,7 @@ import { AppShell } from '@/app/AppShell'
 import { LocaleProvider } from '@/app/locale-provider'
 import { PwaUpdatePrompt } from '@/app/PwaUpdatePrompt'
 import { ThemeProvider } from '@/app/theme-provider'
+import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
 import { initializeDatabase } from '@/lib/db'
 
 const NotFoundPage = lazy(() =>
@@ -51,6 +52,11 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 )
+const AuthCallbackPage = lazy(() =>
+  import('@/features/auth/auth-callback-page').then((module) => ({
+    default: module.AuthCallbackPage,
+  })),
+)
 
 function RouteFallback() {
   return <div className="px-2 py-8" aria-hidden />
@@ -58,7 +64,12 @@ function RouteFallback() {
 
 export default function App() {
   useEffect(() => {
-    void initializeDatabase()
+    const initializeApp = async () => {
+      await initializeDatabase()
+      await cloudSyncEngine.start()
+    }
+
+    void initializeApp()
   }, [])
 
   return (
@@ -81,6 +92,7 @@ export default function App() {
                 <Route path="/home" element={<Navigate to="/" replace />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
             </Routes>
           </Suspense>
           <PwaUpdatePrompt />

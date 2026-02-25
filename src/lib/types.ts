@@ -1,6 +1,8 @@
 export type ID = string
 
 export type ClothingStatus = 'clean' | 'dirty' | 'washing' | 'drying'
+export type SyncTableName = 'categories' | 'items' | 'outfits' | 'laundry_logs' | 'photos'
+export type SyncQueueOperation = 'upsert' | 'delete'
 
 export interface Category {
   id: ID
@@ -101,4 +103,33 @@ export interface PhotoUploadInput {
   mimeType: string
   width: number
   height: number
+}
+
+export interface SyncCursor {
+  serverUpdatedAt: string
+  id: ID
+}
+
+export type SyncCursorMap = Partial<Record<SyncTableName, SyncCursor>>
+
+export interface SyncMeta {
+  key: 'cloud'
+  enabled: boolean
+  deviceId: string
+  linkedUserId?: string
+  lastSyncedAt?: string
+  lastError?: string
+  cursors: SyncCursorMap
+}
+
+export interface SyncQueueEntry {
+  id: ID
+  table: SyncTableName
+  entityId: ID
+  op: SyncQueueOperation
+  changedAt: string
+  retryCount: number
+  nextRetryAt?: string
+  lastError?: string
+  createdAt: string
 }
