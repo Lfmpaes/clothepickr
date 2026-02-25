@@ -35,9 +35,8 @@ export class ClothePickrDb extends Dexie {
       photos: '&id, itemId, createdAt',
       outfits: '&id, name, isFavorite, updatedAt, *itemIds',
       laundryLogs: '&id, itemId, changedAt, fromStatus, toStatus',
-      syncMeta: '&key, enabled, linkedUserId, lastSyncedAt',
-      syncQueue:
-        '&id, table, entityId, op, changedAt, retryCount, nextRetryAt, createdAt, [table+entityId], [nextRetryAt+createdAt]',
+      syncMeta: '&key, linkedUserId, updatedAt',
+      syncQueue: '&id, [table+entityId], table, entityId, op, changedAt, nextRetryAt',
     })
   }
 }

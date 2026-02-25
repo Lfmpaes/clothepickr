@@ -1,5 +1,4 @@
 import { DEFAULT_CATEGORIES } from '@/lib/constants'
-import { clearSyncQueue, registerSyncHooks, updateSyncMeta } from '@/lib/cloud/queue'
 import { ClothingStatusMachine } from '@/lib/domain/statusMachine'
 import {
   DexieCategoryRepository,
@@ -23,8 +22,6 @@ export const statusMachine = new ClothingStatusMachine(itemRepository, laundryRe
 let initialized = false
 
 export async function initializeDatabase() {
-  registerSyncHooks(db)
-
   if (initialized) {
     return
   }
@@ -51,7 +48,6 @@ export async function initializeDatabase() {
 export async function resetDatabase() {
   await db.delete()
   await db.open()
-  registerSyncHooks(db)
   initialized = false
   await initializeDatabase()
 }
@@ -133,14 +129,9 @@ export async function restoreBackupSnapshot(payload: unknown) {
     db.photos.clear(),
     db.outfits.clear(),
     db.laundryLogs.clear(),
-    clearSyncQueue(db),
+    db.syncMeta.clear(),
+    db.syncQueue.clear(),
   ])
-
-  await updateSyncMeta(db, {
-    cursors: {},
-    lastSyncedAt: undefined,
-    lastError: undefined,
-  })
 
   if (snapshot.data.categories.length > 0) {
     await db.categories.bulkAdd(snapshot.data.categories)

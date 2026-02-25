@@ -1,43 +1,27 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Moon, Sun, Upload } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
 import { useLocale } from '@/app/locale-context'
 import { useTheme } from '@/app/theme-context'
 import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import {
-  getCloudUser,
-  sendMagicLink,
-  signOutCloud,
-  verifyEmailOtpCode,
-} from '@/lib/cloud/auth'
-import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
-import { isSupabaseConfigured } from '@/lib/cloud/supabase-client'
-import { useCloudSyncState } from '@/lib/cloud/sync-state-store'
 import { createBackupSnapshot, resetDatabase, restoreBackupSnapshot } from '@/lib/db'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { Locale } from '@/lib/i18n/translations'
+import { useCloudSyncState } from '@/lib/cloud/sync-state-store'
+import { getCloudUser, sendMagicLink, signOutCloud } from '@/lib/cloud/auth'
+import { isSupabaseConfigured } from '@/lib/cloud/supabase-client'
+import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
+import { Checkbox } from '@/components/ui/checkbox'
 import { formatDateTime } from '@/lib/utils'
 
 export function SettingsPage() {
   const { locale, setLocale, t } = useLocale()
   const { theme, toggleTheme } = useTheme()
   const cloudState = useCloudSyncState()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [cloudEmail, setCloudEmail] = useState('')
-  const [otpCode, setOtpCode] = useState('')
-  const [cloudUserEmail, setCloudUserEmail] = useState<string>()
-  const [cloudAuthMessage, setCloudAuthMessage] = useState<string>()
-  const [cloudAuthError, setCloudAuthError] = useState<string>()
-  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false)
-  const [isVerifyingCode, setIsVerifyingCode] = useState(false)
-  const [isTogglingSync, setIsTogglingSync] = useState(false)
-  const [isSyncingNow, setIsSyncingNow] = useState(false)
-  const [isSigningOut, setIsSigningOut] = useState(false)
+
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
   const [isExporting, setIsExporting] = useState(false)
@@ -48,159 +32,6 @@ export function SettingsPage() {
   const [isSendingMagicLink, setIsSendingMagicLink] = useState(false)
 
   const restoreInputRef = useRef<HTMLInputElement>(null)
-  const supabaseReady = isSupabaseConfigured()
-
-  useEffect(() => {
-    if (!supabaseReady) {
-      setCloudUserEmail(undefined)
-      return
-    }
-
-    const syncUser = async () => {
-      try {
-        const user = await getCloudUser()
-        setCloudUserEmail(user?.email)
-        if (user?.email) {
-          setCloudEmail(user.email)
-        }
-      } catch {
-        setCloudUserEmail(undefined)
-      }
-    }
-
-    void syncUser()
-  }, [cloudState.authenticated, supabaseReady])
-
-  useEffect(() => {
-    if (searchParams.get('cloudAuth') !== 'success') {
-      return
-    }
-
-    setCloudAuthMessage(t('cloudSync.message.callbackSuccess'))
-    setCloudAuthError(undefined)
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.delete('cloudAuth')
-      return next
-    }, { replace: true })
-  }, [searchParams, setSearchParams, t])
-
-  const handleSendMagicLink = async () => {
-    setCloudAuthMessage(undefined)
-    setCloudAuthError(undefined)
-
-    if (!supabaseReady) {
-      setCloudAuthError(t('cloudSync.error.notConfigured'))
-      return
-    }
-
-    const normalizedEmail = cloudEmail.trim()
-    if (!normalizedEmail) {
-      setCloudAuthError(t('cloudSync.error.invalidEmail'))
-      return
-    }
-
-    setIsSendingMagicLink(true)
-    try {
-      await sendMagicLink(normalizedEmail)
-      setCloudAuthMessage(t('cloudSync.message.magicLinkSent'))
-    } catch (magicLinkError) {
-      setCloudAuthError(
-        magicLinkError instanceof Error
-          ? magicLinkError.message
-          : t('cloudSync.error.sendMagicLink'),
-      )
-    } finally {
-      setIsSendingMagicLink(false)
-    }
-  }
-
-  const handleVerifyCode = async () => {
-    setCloudAuthMessage(undefined)
-    setCloudAuthError(undefined)
-
-    if (!supabaseReady) {
-      setCloudAuthError(t('cloudSync.error.notConfigured'))
-      return
-    }
-
-    const normalizedEmail = cloudEmail.trim()
-    const normalizedCode = otpCode.trim()
-    if (!normalizedEmail) {
-      setCloudAuthError(t('cloudSync.error.invalidEmail'))
-      return
-    }
-    if (!normalizedCode) {
-      setCloudAuthError(t('cloudSync.error.invalidCode'))
-      return
-    }
-
-    setIsVerifyingCode(true)
-    try {
-      await verifyEmailOtpCode(normalizedEmail, normalizedCode)
-      await cloudSyncEngine.start()
-      setOtpCode('')
-      setCloudAuthMessage(t('cloudSync.message.codeVerified'))
-      const user = await getCloudUser()
-      setCloudUserEmail(user?.email)
-    } catch (verifyError) {
-      setCloudAuthError(
-        verifyError instanceof Error ? verifyError.message : t('cloudSync.error.invalidCode'),
-      )
-    } finally {
-      setIsVerifyingCode(false)
-    }
-  }
-
-  const handleToggleSync = async (enabled: boolean) => {
-    setCloudAuthMessage(undefined)
-    setCloudAuthError(undefined)
-    setIsTogglingSync(true)
-
-    try {
-      await cloudSyncEngine.setEnabled(enabled)
-      if (enabled && !cloudState.authenticated) {
-        setCloudAuthMessage(t('cloudSync.message.signInToStart'))
-      }
-    } catch (syncError) {
-      setCloudAuthError(
-        syncError instanceof Error ? syncError.message : t('cloudSync.error.toggleSync'),
-      )
-    } finally {
-      setIsTogglingSync(false)
-    }
-  }
-
-  const handleSyncNow = async () => {
-    setCloudAuthError(undefined)
-    setIsSyncingNow(true)
-    try {
-      await cloudSyncEngine.syncNow('manual')
-    } catch (syncError) {
-      setCloudAuthError(
-        syncError instanceof Error ? syncError.message : t('cloudSync.error.syncNow'),
-      )
-    } finally {
-      setIsSyncingNow(false)
-    }
-  }
-
-  const handleSignOutCloud = async () => {
-    setCloudAuthMessage(undefined)
-    setCloudAuthError(undefined)
-    setIsSigningOut(true)
-    try {
-      await signOutCloud()
-      setCloudUserEmail(undefined)
-      setCloudAuthMessage(t('cloudSync.message.signedOut'))
-    } catch (signOutError) {
-      setCloudAuthError(
-        signOutError instanceof Error ? signOutError.message : t('cloudSync.error.signOut'),
-      )
-    } finally {
-      setIsSigningOut(false)
-    }
-  }
 
   const cloudConfigured = isSupabaseConfigured()
 
@@ -429,112 +260,70 @@ export function SettingsPage() {
         <CardTitle>{t('cloudSync.title')}</CardTitle>
         <CardDescription className="mt-1">{t('cloudSync.description')}</CardDescription>
 
-        {!supabaseReady ? (
-          <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
-            {t('cloudSync.notConfigured')}
-          </p>
+        {!cloudConfigured ? (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{t('cloudSync.notConfigured')}</p>
         ) : null}
 
-        {!cloudState.authenticated ? (
-          <div className="mt-3 max-w-md space-y-3">
-            <div>
-              <Label htmlFor="cloud-email">{t('cloudSync.emailLabel')}</Label>
-              <Input
-                id="cloud-email"
-                type="email"
-                autoComplete="email"
-                placeholder={t('cloudSync.emailPlaceholder')}
-                value={cloudEmail}
-                onChange={(event) => setCloudEmail(event.target.value)}
-              />
-            </div>
-
-            <Button onClick={handleSendMagicLink} disabled={!supabaseReady || isSendingMagicLink}>
-              {isSendingMagicLink
-                ? t('cloudSync.sendingMagicLink')
-                : t('cloudSync.sendMagicLink')}
+        {cloudConfigured && !cloudState.authenticated ? (
+          <div className="mt-3 max-w-sm space-y-2">
+            <Label htmlFor="cloud-email">{t('cloudSync.emailLabel')}</Label>
+            <Input
+              id="cloud-email"
+              type="email"
+              value={magicLinkEmail}
+              placeholder={t('cloudSync.emailPlaceholder')}
+              onChange={(event) => setMagicLinkEmail(event.target.value)}
+            />
+            <Button onClick={handleSendMagicLink} disabled={isSendingMagicLink}>
+              {isSendingMagicLink ? t('cloudSync.sendingLink') : t('cloudSync.sendLink')}
             </Button>
-
-            <div>
-              <Label htmlFor="cloud-otp-code">{t('cloudSync.codeLabel')}</Label>
-              <Input
-                id="cloud-otp-code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder={t('cloudSync.codePlaceholder')}
-                value={otpCode}
-                onChange={(event) => setOtpCode(event.target.value)}
-              />
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={handleVerifyCode}
-              disabled={!supabaseReady || isVerifyingCode}
-            >
-              {isVerifyingCode ? t('cloudSync.verifyingCode') : t('cloudSync.verifyCode')}
-            </Button>
-
-            {cloudAuthMessage ? (
-              <p className="text-sm text-emerald-700 dark:text-emerald-400">{cloudAuthMessage}</p>
-            ) : null}
-            {cloudAuthError ? (
-              <p className="text-sm text-rose-700 dark:text-rose-400">{cloudAuthError}</p>
-            ) : null}
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.magicLinkHint')}</p>
           </div>
-        ) : (
+        ) : null}
+
+        {cloudConfigured && cloudState.authenticated ? (
           <div className="mt-3 space-y-3">
-            <p className="text-sm text-slate-700 dark:text-slate-300">
-              {t('cloudSync.linkedAs', { email: cloudUserEmail ?? '' })}
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              {t('cloudSync.signedInAs', { email: linkedEmail ?? 'unknown' })}
             </p>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+            <div className="flex items-center gap-2">
               <Checkbox
+                id="cloud-sync-enabled"
                 checked={cloudState.enabled}
-                onChange={(event) => {
-                  void handleToggleSync(event.target.checked)
-                }}
-                disabled={isTogglingSync}
+                onChange={handleToggleCloudSync}
+                disabled={isCloudActionRunning}
               />
-              {t('cloudSync.enableToggle')}
-            </label>
+              <Label htmlFor="cloud-sync-enabled">{t('cloudSync.enabledLabel')}</Label>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.enabledDescription')}</p>
 
-            <p className="text-sm text-slate-700 dark:text-slate-300">
-              {t('cloudSync.statusLabel')}: {t(`cloudSync.status.${cloudState.status}`)}
-            </p>
-            <p className="text-sm text-slate-700 dark:text-slate-300">
-              {t('cloudSync.pendingCount', { count: cloudState.pendingCount })}
-            </p>
-            <p className="text-sm text-slate-700 dark:text-slate-300">
-              {cloudState.lastSyncedAt
-                ? t('cloudSync.lastSynced', { at: formatDateTime(cloudState.lastSyncedAt) })
-                : t('cloudSync.neverSynced')}
-            </p>
+            <div className="grid gap-1 text-sm text-slate-700 dark:text-slate-200">
+              <p>
+                <span className="font-medium">{t('cloudSync.statusLabel')}:</span> {cloudStatusLabel}
+              </p>
+              <p>
+                <span className="font-medium">{t('cloudSync.pendingLabel')}:</span> {cloudState.pendingCount}
+              </p>
+              <p>
+                <span className="font-medium">{t('cloudSync.lastSyncedLabel')}:</span> {lastSyncedLabel}
+              </p>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                onClick={handleSyncNow}
-                disabled={!cloudState.enabled || isSyncingNow}
+                onClick={handleCloudSyncNow}
+                disabled={!cloudState.enabled || isCloudActionRunning}
               >
-                {isSyncingNow ? t('cloudSync.syncingNow') : t('cloudSync.syncNow')}
+                {isCloudActionRunning ? t('cloudSync.syncingNow') : t('cloudSync.syncNow')}
               </Button>
-              <Button variant="secondary" onClick={handleSignOutCloud} disabled={isSigningOut}>
-                {isSigningOut ? t('cloudSync.signingOut') : t('cloudSync.signOut')}
+              <Button variant="secondary" onClick={handleCloudSignOut} disabled={isCloudActionRunning}>
+                {t('cloudSync.signOut')}
               </Button>
             </div>
-
-            {cloudAuthMessage ? (
-              <p className="text-sm text-emerald-700 dark:text-emerald-400">{cloudAuthMessage}</p>
-            ) : null}
-            {cloudAuthError || cloudState.lastError ? (
-              <p className="text-sm text-rose-700 dark:text-rose-400">
-                {cloudAuthError ?? cloudState.lastError}
-              </p>
-            ) : null}
           </div>
-        )}
+        ) : null}
       </Card>
 
       <Card className="mb-4">
