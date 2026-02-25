@@ -16,6 +16,11 @@ const CategoriesPage = lazy(() =>
     default: module.CategoriesPage,
   })),
 )
+const AuthCallbackPage = lazy(() =>
+  import('@/features/auth/auth-callback-page').then((module) => ({
+    default: module.AuthCallbackPage,
+  })),
+)
 const DashboardPage = lazy(() =>
   import('@/features/dashboard/dashboard-page').then((module) => ({
     default: module.DashboardPage,
@@ -78,6 +83,7 @@ export default function App() {
         <BrowserRouter>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<AppShell />}>
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/items" element={<ItemsPage />} />

@@ -42,6 +42,11 @@ export function SettingsPage() {
   const [error, setError] = useState<string>()
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [magicLinkEmail, setMagicLinkEmail] = useState('')
+  const [linkedEmail, setLinkedEmail] = useState<string>()
+  const [isCloudActionRunning, setIsCloudActionRunning] = useState(false)
+  const [isSendingMagicLink, setIsSendingMagicLink] = useState(false)
+
   const restoreInputRef = useRef<HTMLInputElement>(null)
   const supabaseReady = isSupabaseConfigured()
 
@@ -197,6 +202,38 @@ export function SettingsPage() {
     }
   }
 
+  const cloudConfigured = isSupabaseConfigured()
+
+  useEffect(() => {
+    let active = true
+
+    const loadUser = async () => {
+      if (!cloudState.authenticated) {
+        if (active) {
+          setLinkedEmail(undefined)
+        }
+        return
+      }
+
+      try {
+        const user = await getCloudUser()
+        if (active) {
+          setLinkedEmail(user?.email ?? undefined)
+        }
+      } catch {
+        if (active) {
+          setLinkedEmail(undefined)
+        }
+      }
+    }
+
+    void loadUser()
+
+    return () => {
+      active = false
+    }
+  }, [cloudState.authenticated])
+
   const handleReset = async () => {
     setError(undefined)
     setMessage(undefined)
@@ -273,6 +310,83 @@ export function SettingsPage() {
       event.target.value = ''
     }
   }
+
+  const handleSendMagicLink = async () => {
+    const email = magicLinkEmail.trim()
+
+    setError(undefined)
+    setMessage(undefined)
+
+    if (!email || !email.includes('@')) {
+      setError(t('cloudSync.error.invalidEmail'))
+      return
+    }
+
+    if (!cloudConfigured) {
+      setError(t('cloudSync.error.notConfigured'))
+      return
+    }
+
+    setIsSendingMagicLink(true)
+    try {
+      await sendMagicLink(email, `${window.location.origin}/auth/callback`)
+      setMessage(t('cloudSync.message.magicLinkSent'))
+    } catch (cloudError) {
+      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsSendingMagicLink(false)
+    }
+  }
+
+  const handleToggleCloudSync = async (event: ChangeEvent<HTMLInputElement>) => {
+    setError(undefined)
+    setMessage(undefined)
+    setIsCloudActionRunning(true)
+
+    try {
+      await cloudSyncEngine.setEnabled(event.target.checked)
+      setMessage(event.target.checked ? t('cloudSync.message.syncEnabled') : t('cloudSync.message.syncDisabled'))
+    } catch (cloudError) {
+      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsCloudActionRunning(false)
+    }
+  }
+
+  const handleCloudSyncNow = async () => {
+    setError(undefined)
+    setMessage(undefined)
+    setIsCloudActionRunning(true)
+
+    try {
+      await cloudSyncEngine.syncNow('manual')
+      setMessage(t('cloudSync.message.syncTriggered'))
+    } catch (cloudError) {
+      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsCloudActionRunning(false)
+    }
+  }
+
+  const handleCloudSignOut = async () => {
+    setError(undefined)
+    setMessage(undefined)
+    setIsCloudActionRunning(true)
+
+    try {
+      await signOutCloud()
+      setMessage(t('cloudSync.message.signedOut'))
+    } catch (cloudError) {
+      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsCloudActionRunning(false)
+    }
+  }
+
+  const cloudStatusLabel = t(`cloudSync.status.${cloudState.status}`)
+  const lastSyncedLabel = cloudState.lastSyncedAt
+    ? formatDateTime(cloudState.lastSyncedAt)
+    : t('cloudSync.notSyncedYet')
 
   return (
     <section>
@@ -453,6 +567,7 @@ export function SettingsPage() {
       </Card>
 
       {message ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{message}</p> : null}
+      {cloudState.lastError ? <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">{cloudState.lastError}</p> : null}
       {error ? <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">{error}</p> : null}
     </section>
   )
