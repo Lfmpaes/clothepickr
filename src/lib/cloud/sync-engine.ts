@@ -46,7 +46,7 @@ import {
   resetCloudSyncState,
   subscribeCloudSyncState,
 } from '@/lib/cloud/sync-state-store'
-import { db, itemRepository } from '@/lib/db'
+import { db, itemRepository, reconcileDefaultCategories } from '@/lib/db'
 import type {
   CloudSyncStatus,
   SyncCursor,
@@ -58,6 +58,14 @@ import { nowIso } from '@/lib/utils'
 const SYNC_INTERVAL_MS = 2 * 60 * 1000
 const SYNC_BATCH_SIZE = 100
 const PULL_BATCH_SIZE = 200
+const STORAGE_REMOVE_BATCH_SIZE = 100
+const CLOUD_WIPE_DELETE_ORDER: SyncTableName[] = [
+  'photos',
+  'laundryLogs',
+  'outfits',
+  'items',
+  'categories',
+]
 
 type SyncReason = 'startup' | 'manual' | 'queue' | 'realtime' | 'focus' | 'online' | 'enable' | 'auth'
 
@@ -119,6 +127,7 @@ export interface CloudSyncEngine {
   syncNow(reason?: string): Promise<void>
   setEnabled(enabled: boolean): Promise<void>
   clearQueue(): Promise<void>
+  wipeCloudData(): Promise<void>
   subscribe(listener: () => void): () => void
 }
 
@@ -217,6 +226,56 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   async clearQueue() {
     await clearSyncQueue()
     await this.refreshPendingCount()
+  }
+
+  async wipeCloudData() {
+    const supabase = await assertSupabaseClient()
+    const user = await getCloudUser()
+    if (!user) {
+      throw new Error('Sign in to erase cloud data.')
+    }
+
+    if (this.syncPromise) {
+      await this.syncPromise
+    }
+
+    patchCloudSyncState({
+      status: 'syncing',
+      lastError: undefined,
+    })
+    this.teardownRuntime()
+    setQueueCaptureEnabled(false)
+
+    try {
+      await this.removeAllRemotePhotoObjects(supabase, user.id)
+
+      for (const table of CLOUD_WIPE_DELETE_ORDER) {
+        const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
+        const { error } = await supabase.from(remoteTable).delete().eq('user_id', user.id)
+        if (error) {
+          throw new Error(error.message)
+        }
+      }
+
+      await clearSyncQueue()
+      await patchSyncMeta({
+        enabled: false,
+        linkedUserId: user.id,
+        cursors: {},
+        lastSyncedAt: '',
+        lastError: '',
+      })
+      await this.refreshPendingCount()
+      await this.syncRuntimeFromState('manual')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not erase cloud data.'
+      await patchSyncMeta({ lastError: message })
+      patchCloudSyncState({
+        status: 'error',
+        lastError: message,
+      })
+      throw error
+    }
   }
 
   subscribe(listener: () => void) {
@@ -432,6 +491,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
 
     await this.pushQueue(supabase, user.id)
     await this.pullRemoteChanges(supabase, user.id)
+    await reconcileDefaultCategories()
 
     const syncedAt = nowIso()
     await patchSyncMeta({
@@ -611,6 +671,27 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
 
     if (error) {
       throw new Error(error.message)
+    }
+  }
+
+  private async removeAllRemotePhotoObjects(supabase: SupabaseClient, userId: string) {
+    const { data, error } = await supabase
+      .from('photos')
+      .select('storage_path')
+      .eq('user_id', userId)
+      .not('storage_path', 'is', null)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const storagePaths = [...new Set((data ?? []).map((row) => row.storage_path).filter(Boolean))]
+    for (let start = 0; start < storagePaths.length; start += STORAGE_REMOVE_BATCH_SIZE) {
+      const batch = storagePaths.slice(start, start + STORAGE_REMOVE_BATCH_SIZE)
+      const { error: removeError } = await supabase.storage.from('item-photos').remove(batch)
+      if (removeError) {
+        throw new Error(removeError.message)
+      }
     }
   }
 
