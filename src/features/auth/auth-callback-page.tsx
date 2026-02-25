@@ -15,10 +15,10 @@ export function AuthCallbackPage() {
     const run = async () => {
       try {
         await completeCloudAuthFromUrl()
-        await cloudSyncEngine.syncNow('manual')
+        await cloudSyncEngine.start()
 
         if (active) {
-          navigate('/settings', { replace: true })
+          navigate('/settings?cloudAuth=success', { replace: true })
         }
       } catch (callbackError) {
         if (!active) {

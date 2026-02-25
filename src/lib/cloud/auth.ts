@@ -1,7 +1,11 @@
-import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js'
+import type { AuthChangeEvent, EmailOtpType, Session, User } from '@supabase/supabase-js'
 import { getSupabaseClient } from '@/lib/cloud/supabase-client'
 
-export async function sendMagicLink(email: string, redirectTo: string) {
+export function getCloudAuthCallbackUrl() {
+  return `${window.location.origin}/auth/callback`
+}
+
+export async function sendMagicLink(email: string, redirectTo = getCloudAuthCallbackUrl()) {
   const supabase = getSupabaseClient()
   if (!supabase) {
     throw new Error('Cloud sync is not configured.')
@@ -18,6 +22,25 @@ export async function sendMagicLink(email: string, redirectTo: string) {
   if (error) {
     throw new Error(error.message)
   }
+}
+
+export async function verifyEmailOtpCode(email: string, token: string) {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    throw new Error('Cloud sync is not configured.')
+  }
+
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'email',
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data.session
 }
 
 export async function getCloudSession(): Promise<Session | null> {
@@ -74,10 +97,34 @@ export async function completeCloudAuthFromUrl() {
     return null
   }
 
+  const searchParams = new URLSearchParams(window.location.search)
+  const authCode = searchParams.get('code')
+  if (authCode) {
+    const { error } = await supabase.auth.exchangeCodeForSession(authCode)
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  const tokenHash = searchParams.get('token_hash')
+  const tokenType = searchParams.get('type')
+  if (tokenHash && tokenType) {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: tokenType as EmailOtpType,
+    })
+    if (error) {
+      throw new Error(error.message)
+    }
+  }
+
+  if (authCode || tokenHash) {
+    window.history.replaceState({}, document.title, window.location.pathname)
+  }
+
   const { data, error } = await supabase.auth.getSession()
   if (error) {
     throw new Error(error.message)
   }
-
   return data.session
 }
