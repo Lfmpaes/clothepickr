@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Moon, Sun, Upload } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { useLocale } from '@/app/locale-context'
 import { useTheme } from '@/app/theme-context'
 import { PageHeader } from '@/components/page-header'
@@ -11,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { Locale } from '@/lib/i18n/translations'
 import { useCloudSyncState } from '@/lib/cloud/sync-state-store'
-import { getCloudUser, sendMagicLink, signOutCloud } from '@/lib/cloud/auth'
+import { getCloudUser, sendMagicLink, signOutCloud, verifyEmailOtpCode } from '@/lib/cloud/auth'
 import { isSupabaseConfigured } from '@/lib/cloud/supabase-client'
 import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -21,15 +22,20 @@ export function SettingsPage() {
   const { locale, setLocale, t } = useLocale()
   const { theme, toggleTheme } = useTheme()
   const cloudState = useCloudSyncState()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [magicLinkEmail, setMagicLinkEmail] = useState('')
+  const [emailCode, setEmailCode] = useState('')
   const [linkedEmail, setLinkedEmail] = useState<string>()
   const [isCloudActionRunning, setIsCloudActionRunning] = useState(false)
   const [isSendingMagicLink, setIsSendingMagicLink] = useState(false)
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false)
+  const [cloudMessage, setCloudMessage] = useState<string>()
+  const [cloudError, setCloudError] = useState<string>()
 
   const restoreInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,6 +70,20 @@ export function SettingsPage() {
       active = false
     }
   }, [cloudState.authenticated])
+
+  useEffect(() => {
+    if (searchParams.get('cloudAuth') !== 'success') {
+      return
+    }
+
+    setCloudMessage(t('cloudSync.message.signedIn'))
+    setCloudError(undefined)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.delete('cloudAuth')
+      return next
+    }, { replace: true })
+  }, [searchParams, setSearchParams, t])
 
   const handleReset = async () => {
     setError(undefined)
@@ -145,70 +165,110 @@ export function SettingsPage() {
   const handleSendMagicLink = async () => {
     const email = magicLinkEmail.trim()
 
-    setError(undefined)
-    setMessage(undefined)
+    setCloudError(undefined)
+    setCloudMessage(undefined)
 
     if (!email || !email.includes('@')) {
-      setError(t('cloudSync.error.invalidEmail'))
+      setCloudError(t('cloudSync.error.invalidEmail'))
       return
     }
 
     if (!cloudConfigured) {
-      setError(t('cloudSync.error.notConfigured'))
+      setCloudError(t('cloudSync.error.notConfigured'))
       return
     }
 
     setIsSendingMagicLink(true)
     try {
-      await sendMagicLink(email, `${window.location.origin}/auth/callback`)
-      setMessage(t('cloudSync.message.magicLinkSent'))
+      await sendMagicLink(email)
+      setCloudMessage(t('cloudSync.message.magicLinkSent'))
     } catch (cloudError) {
-      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+      setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
     } finally {
       setIsSendingMagicLink(false)
     }
   }
 
+  const handleVerifyCode = async () => {
+    const email = magicLinkEmail.trim()
+    const code = emailCode.trim()
+
+    setCloudError(undefined)
+    setCloudMessage(undefined)
+
+    if (!email || !email.includes('@')) {
+      setCloudError(t('cloudSync.error.invalidEmail'))
+      return
+    }
+
+    if (!code) {
+      setCloudError(t('cloudSync.error.invalidCode'))
+      return
+    }
+
+    if (!cloudConfigured) {
+      setCloudError(t('cloudSync.error.notConfigured'))
+      return
+    }
+
+    setIsVerifyingCode(true)
+    try {
+      await verifyEmailOtpCode(email, code)
+      const user = await getCloudUser()
+      setLinkedEmail(user?.email ?? undefined)
+      setEmailCode('')
+      setCloudMessage(t('cloudSync.message.codeVerified'))
+    } catch (verifyError) {
+      setCloudError(verifyError instanceof Error ? verifyError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsVerifyingCode(false)
+    }
+  }
+
   const handleToggleCloudSync = async (event: ChangeEvent<HTMLInputElement>) => {
-    setError(undefined)
-    setMessage(undefined)
+    setCloudError(undefined)
+    setCloudMessage(undefined)
     setIsCloudActionRunning(true)
 
     try {
       await cloudSyncEngine.setEnabled(event.target.checked)
-      setMessage(event.target.checked ? t('cloudSync.message.syncEnabled') : t('cloudSync.message.syncDisabled'))
+      setCloudMessage(
+        event.target.checked
+          ? t('cloudSync.message.syncEnabled')
+          : t('cloudSync.message.syncDisabled'),
+      )
     } catch (cloudError) {
-      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+      setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
     } finally {
       setIsCloudActionRunning(false)
     }
   }
 
   const handleCloudSyncNow = async () => {
-    setError(undefined)
-    setMessage(undefined)
+    setCloudError(undefined)
+    setCloudMessage(undefined)
     setIsCloudActionRunning(true)
 
     try {
       await cloudSyncEngine.syncNow('manual')
-      setMessage(t('cloudSync.message.syncTriggered'))
+      setCloudMessage(t('cloudSync.message.syncTriggered'))
     } catch (cloudError) {
-      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+      setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
     } finally {
       setIsCloudActionRunning(false)
     }
   }
 
   const handleCloudSignOut = async () => {
-    setError(undefined)
-    setMessage(undefined)
+    setCloudError(undefined)
+    setCloudMessage(undefined)
     setIsCloudActionRunning(true)
 
     try {
       await signOutCloud()
-      setMessage(t('cloudSync.message.signedOut'))
+      setCloudMessage(t('cloudSync.message.signedOut'))
     } catch (cloudError) {
-      setError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+      setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
     } finally {
       setIsCloudActionRunning(false)
     }
@@ -278,6 +338,28 @@ export function SettingsPage() {
               {isSendingMagicLink ? t('cloudSync.sendingLink') : t('cloudSync.sendLink')}
             </Button>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.magicLinkHint')}</p>
+
+            <Label htmlFor="cloud-email-code">{t('cloudSync.codeLabel')}</Label>
+            <Input
+              id="cloud-email-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={emailCode}
+              placeholder={t('cloudSync.codePlaceholder')}
+              onChange={(event) => setEmailCode(event.target.value)}
+            />
+            <Button variant="outline" onClick={handleVerifyCode} disabled={isVerifyingCode}>
+              {isVerifyingCode ? t('cloudSync.verifyingCode') : t('cloudSync.verifyCode')}
+            </Button>
+
+            {cloudMessage ? (
+              <p className="text-sm text-emerald-700 dark:text-emerald-400">{cloudMessage}</p>
+            ) : null}
+            {cloudError ? <p className="text-sm text-rose-700 dark:text-rose-400">{cloudError}</p> : null}
+            {cloudState.lastError ? (
+              <p className="text-sm text-rose-700 dark:text-rose-400">{cloudState.lastError}</p>
+            ) : null}
           </div>
         ) : null}
 
@@ -322,6 +404,14 @@ export function SettingsPage() {
                 {t('cloudSync.signOut')}
               </Button>
             </div>
+
+            {cloudMessage ? (
+              <p className="text-sm text-emerald-700 dark:text-emerald-400">{cloudMessage}</p>
+            ) : null}
+            {cloudError ? <p className="text-sm text-rose-700 dark:text-rose-400">{cloudError}</p> : null}
+            {cloudState.lastError ? (
+              <p className="text-sm text-rose-700 dark:text-rose-400">{cloudState.lastError}</p>
+            ) : null}
           </div>
         ) : null}
       </Card>
@@ -356,7 +446,6 @@ export function SettingsPage() {
       </Card>
 
       {message ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{message}</p> : null}
-      {cloudState.lastError ? <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">{cloudState.lastError}</p> : null}
       {error ? <p className="mt-2 text-sm text-rose-700 dark:text-rose-400">{error}</p> : null}
     </section>
   )
