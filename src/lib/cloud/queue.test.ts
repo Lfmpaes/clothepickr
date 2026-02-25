@@ -1,49 +1,54 @@
-import { resetDatabase } from '@/lib/db'
+import { ClothePickrDb } from '@/lib/db/schema'
 import {
-  enqueueSyncOperation,
-  getPendingQueueCount,
-  listPendingQueueEntries,
-  markSyncQueueEntryFailure,
-  removeSyncQueueEntry,
+  enqueueSyncUpsert,
+  enqueueSyncDelete,
+  markQueueEntryRetry,
 } from '@/lib/cloud/queue'
 
 describe('sync queue', () => {
-  beforeEach(async () => {
-    await resetDatabase()
+  let db: ClothePickrDb
+
+  beforeEach(() => {
+    db = new ClothePickrDb(`sync-queue-test-${crypto.randomUUID()}`)
   })
 
-  it('dedupes repeated upsert operations per entity', async () => {
-    await enqueueSyncOperation('categories', 'category-1', 'upsert')
-    await enqueueSyncOperation('categories', 'category-1', 'upsert')
-
-    const pending = await listPendingQueueEntries(10)
-
-    expect(pending).toHaveLength(1)
-    expect(pending[0].table).toBe('categories')
-    expect(pending[0].entityId).toBe('category-1')
-    expect(pending[0].op).toBe('upsert')
+  afterEach(async () => {
+    await db.delete()
   })
 
-  it('collapses upsert then delete into a delete', async () => {
-    await enqueueSyncOperation('items', 'item-1', 'upsert')
-    await enqueueSyncOperation('items', 'item-1', 'delete')
+  it('collapses upsert then upsert to the latest upsert entry', async () => {
+    await enqueueSyncUpsert(db, 'items', 'item-1', '2026-02-25T10:00:00.000Z')
+    await enqueueSyncUpsert(db, 'items', 'item-1', '2026-02-25T10:05:00.000Z')
 
-    const pending = await listPendingQueueEntries(10)
-
-    expect(pending).toHaveLength(1)
-    expect(pending[0].op).toBe('delete')
+    const rows = await db.syncQueue.toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].op).toBe('upsert')
+    expect(rows[0].changedAt).toBe('2026-02-25T10:05:00.000Z')
   })
 
-  it('increments retry metadata on failure', async () => {
-    const entry = await enqueueSyncOperation('outfits', 'outfit-1', 'upsert')
-    await markSyncQueueEntryFailure(entry.id, 'boom')
+  it('collapses upsert then delete to delete', async () => {
+    await enqueueSyncUpsert(db, 'items', 'item-1', '2026-02-25T10:00:00.000Z')
+    await enqueueSyncDelete(db, 'items', 'item-1', '2026-02-25T10:06:00.000Z')
 
-    const pending = await listPendingQueueEntries(10)
+    const rows = await db.syncQueue.toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].op).toBe('delete')
+    expect(rows[0].changedAt).toBe('2026-02-25T10:06:00.000Z')
+  })
 
-    expect(pending).toHaveLength(0)
-    expect(await getPendingQueueCount()).toBe(1)
+  it('updates retry fields on queue entry', async () => {
+    const entry = await enqueueSyncUpsert(db, 'outfits', 'outfit-1', '2026-02-25T10:00:00.000Z')
+    await markQueueEntryRetry(
+      db,
+      entry.id,
+      'Temporary network error',
+      3,
+      '2026-02-25T10:15:00.000Z',
+    )
 
-    await removeSyncQueueEntry(entry.id)
-    expect(await getPendingQueueCount()).toBe(0)
+    const reloaded = await db.syncQueue.get(entry.id)
+    expect(reloaded?.retryCount).toBe(3)
+    expect(reloaded?.nextRetryAt).toBe('2026-02-25T10:15:00.000Z')
+    expect(reloaded?.lastError).toBe('Temporary network error')
   })
 })

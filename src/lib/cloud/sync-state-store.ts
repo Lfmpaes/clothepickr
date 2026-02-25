@@ -1,15 +1,16 @@
 import { useSyncExternalStore } from 'react'
-import type { CloudSyncState } from '@/lib/types'
+import type { CloudSyncState } from '@/lib/cloud/types'
 
-const DEFAULT_STATE: CloudSyncState = {
+const listeners = new Set<() => void>()
+
+let state: CloudSyncState = {
   enabled: false,
   authenticated: false,
   status: 'disabled',
   pendingCount: 0,
+  lastSyncedAt: undefined,
+  lastError: undefined,
 }
-
-let state: CloudSyncState = { ...DEFAULT_STATE }
-const listeners = new Set<() => void>()
 
 function emit() {
   for (const listener of listeners) {
@@ -21,29 +22,22 @@ export function getCloudSyncState() {
   return state
 }
 
-export function setCloudSyncState(next: CloudSyncState) {
-  state = next
-  emit()
-}
-
-export function patchCloudSyncState(patch: Partial<CloudSyncState>) {
+export function setCloudSyncState(next: Partial<CloudSyncState>) {
   state = {
     ...state,
-    ...patch,
+    ...next,
   }
   emit()
 }
 
-export function resetCloudSyncState() {
-  state = { ...DEFAULT_STATE }
+export function replaceCloudSyncState(next: CloudSyncState) {
+  state = next
   emit()
 }
 
 export function subscribeCloudSyncState(listener: () => void) {
   listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
+  return () => listeners.delete(listener)
 }
 
 export function useCloudSyncState() {

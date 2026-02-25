@@ -1,6 +1,8 @@
 export type ID = string
 
 export type ClothingStatus = 'clean' | 'dirty' | 'washing' | 'drying'
+export type SyncTableName = 'categories' | 'items' | 'outfits' | 'laundry_logs' | 'photos'
+export type SyncQueueOperation = 'upsert' | 'delete'
 
 export interface Category {
   id: ID
@@ -103,10 +105,6 @@ export interface PhotoUploadInput {
   height: number
 }
 
-export type SyncOperation = 'upsert' | 'delete'
-
-export type SyncTableName = 'categories' | 'items' | 'outfits' | 'laundryLogs' | 'photos'
-
 export interface SyncCursor {
   serverUpdatedAt: string
   id: ID
@@ -118,33 +116,20 @@ export interface SyncMeta {
   key: 'cloud'
   enabled: boolean
   deviceId: string
-  linkedUserId: string
-  lastSyncedAt: string
-  lastError: string
+  linkedUserId?: string
+  lastSyncedAt?: string
+  lastError?: string
   cursors: SyncCursorMap
-  createdAt: string
-  updatedAt: string
 }
 
 export interface SyncQueueEntry {
   id: ID
   table: SyncTableName
   entityId: ID
-  op: SyncOperation
+  op: SyncQueueOperation
   changedAt: string
   retryCount: number
-  nextRetryAt: string
-  lastError: string
-  createdAt: string
-}
-
-export type CloudSyncStatus = 'disabled' | 'idle' | 'syncing' | 'offline' | 'error'
-
-export interface CloudSyncState {
-  enabled: boolean
-  authenticated: boolean
-  status: CloudSyncStatus
-  pendingCount: number
-  lastSyncedAt?: string
+  nextRetryAt?: string
   lastError?: string
+  createdAt: string
 }

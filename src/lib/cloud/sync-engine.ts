@@ -1,808 +1,742 @@
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
+import type { Session, User } from '@supabase/supabase-js'
+import { onCloudAuthStateChange, getCloudUser } from '@/lib/cloud/auth'
 import {
-  fromRemoteCategory,
-  fromRemoteItem,
-  fromRemoteLaundryLog,
-  fromRemoteOutfit,
-  fromRemotePhoto,
-  toRemoteCategory,
-  toRemoteItem,
-  toRemoteLaundryLog,
-  toRemoteOutfit,
-  toRemotePhoto,
   buildPhotoStoragePath,
+  mapCategoryToRemoteRow,
+  mapItemToRemoteRow,
+  mapLaundryLogToRemoteRow,
+  mapOutfitToRemoteRow,
+  mapPhotoToRemoteRow,
+  mapRemoteCategoryToLocal,
+  mapRemoteItemToLocal,
+  mapRemoteLaundryLogToLocal,
+  mapRemoteOutfitToLocal,
 } from '@/lib/cloud/mappers'
 import {
-  SYNC_TABLES,
-  type RemoteCategoryRow,
-  type RemoteItemRow,
-  type RemoteLaundryLogRow,
-  type RemoteOutfitRow,
-  type RemotePhotoRow,
-  type RemotePullResult,
-  type RemoteRowMap,
-  REMOTE_TABLE_BY_SYNC_TABLE,
-} from '@/lib/cloud/types'
-import { getCloudUser, onCloudAuthStateChange } from '@/lib/cloud/auth'
-import { getSupabaseClient } from '@/lib/cloud/supabase-client'
-import {
   clearSyncQueue,
-  ensureSyncMeta,
-  getPendingEntityIdsByTable,
+  getOrCreateSyncMeta,
   getPendingQueueCount,
-  listPendingQueueEntries,
-  markSyncQueueEntryFailure,
-  patchSyncMeta,
-  registerSyncQueueHooks,
-  removeSyncQueueEntry,
-  runWithSyncMuted,
-  seedSyncQueueFromLocalData,
-  setQueueCaptureEnabled,
-  setQueueChangeListener,
+  hasPendingEntryForRecord,
+  listDueQueueEntries,
+  markQueueEntryRetry,
+  registerSyncHooks,
+  removeQueueEntries,
+  seedQueueFromLocalData,
+  setSyncCursor,
+  SYNC_QUEUE_CHANGED_EVENT,
+  updateSyncMeta,
 } from '@/lib/cloud/queue'
-import {
-  getCloudSyncState,
-  patchCloudSyncState,
-  resetCloudSyncState,
-  subscribeCloudSyncState,
-} from '@/lib/cloud/sync-state-store'
-import { db, itemRepository } from '@/lib/db'
-import type {
-  CloudSyncStatus,
-  SyncCursor,
-  SyncQueueEntry,
-  SyncTableName,
-} from '@/lib/types'
+import { SupabaseRemoteSyncRepository } from '@/lib/cloud/repository'
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/cloud/supabase-client'
+import { setCloudSyncState, subscribeCloudSyncState } from '@/lib/cloud/sync-state-store'
+import { runWithSyncMuted } from '@/lib/cloud/sync-muted'
+import { SYNC_TABLES, type CloudSyncEngine, type SyncReason } from '@/lib/cloud/types'
+import { db } from '@/lib/db'
+import type { RemoteRowFor } from '@/lib/cloud/types'
 import { nowIso } from '@/lib/utils'
 
-const SYNC_INTERVAL_MS = 2 * 60 * 1000
-const SYNC_BATCH_SIZE = 100
+const PUSH_BATCH_SIZE = 100
 const PULL_BATCH_SIZE = 200
+const PERIODIC_PULL_MS = 2 * 60 * 1000
+const RETRY_BASE_DELAY_MS = 1000
+const RETRY_MAX_DELAY_MS = 60 * 1000
 
-type SyncReason = 'startup' | 'manual' | 'queue' | 'realtime' | 'focus' | 'online' | 'enable' | 'auth'
+function computeRetryDelayMs(retryCount: number) {
+  return Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** retryCount)
+}
 
-function statusByConnectivity(defaultStatus: CloudSyncStatus): CloudSyncStatus {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    return 'offline'
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message
   }
-
-  return defaultStatus
+  return 'Cloud sync failed.'
 }
 
 function isAuthError(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
+  const message = getErrorMessage(error).toLowerCase()
+  const status = (error as { status?: number }).status
+  return status === 401 || status === 403 || message.includes('jwt') || message.includes('auth')
+}
+
+function isNetworkError(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase()
   return (
-    message.includes('jwt') ||
-    message.includes('auth') ||
-    message.includes('permission') ||
-    message.includes('unauthorized') ||
-    message.includes('401')
+    message.includes('network') ||
+    message.includes('failed to fetch') ||
+    message.includes('timeout')
   )
 }
 
-async function assertSupabaseClient() {
-  const supabase = getSupabaseClient()
-  if (!supabase) {
-    throw new Error('Cloud sync is not configured.')
+function isBrowserOnline() {
+  if (typeof navigator === 'undefined') {
+    return true
+  }
+  return navigator.onLine
+}
+
+class DefaultCloudSyncEngine implements CloudSyncEngine {
+  private started = false
+  private runtimeActive = false
+  private intervalId: ReturnType<typeof setInterval> | undefined
+  private authUnsubscribe: (() => void) | undefined
+  private realtimeChannelName: string | undefined
+  private syncPromise: Promise<void> | undefined
+  private lastUserId: string | undefined
+
+  private readonly remoteRepository = new SupabaseRemoteSyncRepository()
+
+  private readonly onQueueChanged = () => {
+    void this.syncNow('local-change')
   }
 
-  return supabase
-}
-
-async function removeLocalPhoto(photoId: string, fallbackItemId?: string) {
-  await db.transaction('rw', db.photos, db.items, async () => {
-    const current = await db.photos.get(photoId)
-    const itemId = current?.itemId ?? fallbackItemId
-
-    await db.photos.delete(photoId)
-
-    if (!itemId) {
-      return
-    }
-
-    const linkedItem = await db.items.get(itemId)
-    if (!linkedItem) {
-      return
-    }
-
-    await db.items.put({
-      ...linkedItem,
-      photoIds: linkedItem.photoIds.filter((id) => id !== photoId),
-      updatedAt: nowIso(),
-    })
-  })
-}
-
-export interface CloudSyncEngine {
-  start(): Promise<void>
-  stop(): void
-  syncNow(reason?: string): Promise<void>
-  setEnabled(enabled: boolean): Promise<void>
-  clearQueue(): Promise<void>
-  subscribe(listener: () => void): () => void
-}
-
-class SupabaseCloudSyncEngine implements CloudSyncEngine {
-  private started = false
-  private intervalId?: number
-  private channel?: RealtimeChannel
-  private syncPromise?: Promise<void>
-  private unsubscribeAuth?: () => void
-  private listenersAttached = false
-
-  private readonly handleOnline = () => {
+  private readonly onOnline = () => {
     void this.syncNow('online')
   }
 
-  private readonly handleOffline = () => {
-    patchCloudSyncState({ status: 'offline' })
+  private readonly onOffline = () => {
+    setCloudSyncState({ status: 'offline' })
   }
 
-  private readonly handleFocus = () => {
-    void this.syncNow('focus')
-  }
-
-  private readonly handleVisibility = () => {
-    if (document.visibilityState === 'visible') {
+  private readonly onWindowFocus = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
       void this.syncNow('focus')
     }
-  }
-
-  async start() {
-    if (this.started) {
-      return
-    }
-
-    this.started = true
-    registerSyncQueueHooks()
-    setQueueChangeListener(() => {
-      void this.refreshPendingCount()
-      if (this.shouldSyncRun()) {
-        void this.syncNow('queue')
-      }
-    })
-
-    await ensureSyncMeta()
-    await this.refreshPendingCount()
-
-    this.unsubscribeAuth = onCloudAuthStateChange(() => {
-      void this.handleAuthStateChange()
-    })
-
-    await this.syncRuntimeFromState('startup')
-  }
-
-  stop() {
-    this.started = false
-    this.teardownRuntime()
-    setQueueCaptureEnabled(false)
-    setQueueChangeListener(undefined)
-
-    if (this.unsubscribeAuth) {
-      this.unsubscribeAuth()
-      this.unsubscribeAuth = undefined
-    }
-
-    resetCloudSyncState()
-  }
-
-  async setEnabled(enabled: boolean) {
-    const user = await getCloudUser()
-    const current = await ensureSyncMeta()
-
-    if (enabled && current.linkedUserId && user && current.linkedUserId !== user.id) {
-      throw new Error('This device is already linked to another cloud account. Reset local data before switching accounts.')
-    }
-
-    let deviceId = current.deviceId
-    if (enabled && !deviceId) {
-      deviceId = crypto.randomUUID()
-    }
-
-    const linkedUserId = enabled && user ? user.id : current.linkedUserId
-    const updated = await patchSyncMeta({
-      enabled,
-      deviceId,
-      linkedUserId,
-      lastError: '',
-    })
-
-    if (enabled && !updated.lastSyncedAt) {
-      await seedSyncQueueFromLocalData()
-    }
-
-    await this.syncRuntimeFromState('enable')
-  }
-
-  async clearQueue() {
-    await clearSyncQueue()
-    await this.refreshPendingCount()
   }
 
   subscribe(listener: () => void) {
     return subscribeCloudSyncState(listener)
   }
 
-  async syncNow(reason: string = 'manual') {
+  async start() {
+    if (this.started) {
+      return
+    }
+    this.started = true
+
+    registerSyncHooks(db)
+    const meta = await getOrCreateSyncMeta(db)
+    const pendingCount = await getPendingQueueCount(db)
+
+    if (!isSupabaseConfigured()) {
+      setCloudSyncState({
+        enabled: meta.enabled,
+        authenticated: false,
+        status: meta.enabled ? 'error' : 'disabled',
+        pendingCount,
+        lastSyncedAt: meta.lastSyncedAt,
+        lastError: meta.enabled ? 'Supabase env vars are missing.' : meta.lastError,
+      })
+      return
+    }
+
+    const user = await this.safeGetCloudUser()
+    setCloudSyncState({
+      enabled: meta.enabled,
+      authenticated: Boolean(user),
+      status: this.resolveIdleStatus(meta.enabled, Boolean(user)),
+      pendingCount,
+      lastSyncedAt: meta.lastSyncedAt,
+      lastError: meta.lastError,
+    })
+
+    this.authUnsubscribe = onCloudAuthStateChange((_event, session) => {
+      void this.handleAuthChange(session)
+    })
+
+    try {
+      await this.reconcileRuntime(user)
+    } catch (error) {
+      setCloudSyncState({
+        status: 'error',
+        lastError: getErrorMessage(error),
+      })
+    }
+  }
+
+  stop() {
+    this.started = false
+    this.disableRuntime()
+    if (this.authUnsubscribe) {
+      this.authUnsubscribe()
+      this.authUnsubscribe = undefined
+    }
+  }
+
+  async setEnabled(enabled: boolean) {
+    const nextMeta = await updateSyncMeta(db, {
+      enabled,
+      lastError: undefined,
+    })
+
+    const pendingCount = await getPendingQueueCount(db)
+    setCloudSyncState({
+      enabled: nextMeta.enabled,
+      pendingCount,
+      lastSyncedAt: nextMeta.lastSyncedAt,
+      lastError: nextMeta.lastError,
+    })
+
+    if (!enabled) {
+      this.disableRuntime()
+      setCloudSyncState({
+        status: 'disabled',
+      })
+      return
+    }
+
+    if (!isSupabaseConfigured()) {
+      const errorMessage = 'Supabase env vars are missing.'
+      await updateSyncMeta(db, { lastError: errorMessage })
+      setCloudSyncState({
+        status: 'error',
+        lastError: errorMessage,
+      })
+      return
+    }
+
+    const user = await this.safeGetCloudUser()
+    if (!user) {
+      setCloudSyncState({
+        authenticated: false,
+        status: 'paused',
+      })
+      return
+    }
+
+    const needsInitialMerge = await this.ensureLinkedUser(nextMeta, user.id)
+    await this.enableRuntime(user.id)
+
+    if (needsInitialMerge) {
+      await this.syncNow('initial-link')
+      return
+    }
+
+    await this.syncNow('manual')
+  }
+
+  async syncNow(reason: SyncReason) {
     if (!this.started) {
       return
     }
 
-    if (!this.shouldSyncRun()) {
-      return
-    }
-
     if (this.syncPromise) {
-      await this.syncPromise
-      return
+      return this.syncPromise
     }
 
-    this.syncPromise = this.runSync(reason as SyncReason)
-      .catch(async (error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Sync failed.'
-        await patchSyncMeta({ lastError: message })
-
-        patchCloudSyncState({
-          status: 'error',
-          lastError: message,
-        })
-
-        if (isAuthError(error)) {
-          setQueueCaptureEnabled(false)
-          this.teardownRuntime()
-        }
-      })
-      .finally(() => {
-        this.syncPromise = undefined
-      })
-
-    await this.syncPromise
-  }
-
-  private shouldSyncRun() {
-    const state = getCloudSyncState()
-    return state.enabled && state.authenticated
-  }
-
-  private async refreshPendingCount() {
-    const pendingCount = await getPendingQueueCount()
-    patchCloudSyncState({ pendingCount })
-  }
-
-  private async handleAuthStateChange() {
-    await this.syncRuntimeFromState('auth')
-  }
-
-  private async syncRuntimeFromState(trigger: SyncReason) {
-    const meta = await ensureSyncMeta()
-    const user = await getCloudUser()
-    const authenticated = Boolean(user)
-
-    if (meta.enabled && meta.linkedUserId && user && meta.linkedUserId !== user.id) {
-      patchCloudSyncState({
-        enabled: true,
-        authenticated: true,
-        status: 'error',
-        lastError: 'This device is linked to another account. Reset local data before switching accounts.',
-        lastSyncedAt: meta.lastSyncedAt || undefined,
-      })
-      setQueueCaptureEnabled(false)
-      this.teardownRuntime()
-      return
-    }
-
-    if (!meta.enabled) {
-      patchCloudSyncState({
-        enabled: false,
-        authenticated,
-        status: 'disabled',
-        lastError: undefined,
-        lastSyncedAt: meta.lastSyncedAt || undefined,
-      })
-      setQueueCaptureEnabled(false)
-      this.teardownRuntime()
-      return
-    }
-
-    if (!authenticated || !user) {
-      patchCloudSyncState({
-        enabled: true,
-        authenticated: false,
-        status: 'disabled',
-        lastError: undefined,
-        lastSyncedAt: meta.lastSyncedAt || undefined,
-      })
-      setQueueCaptureEnabled(false)
-      this.teardownRuntime()
-      return
-    }
-
-    if (!meta.linkedUserId) {
-      await patchSyncMeta({ linkedUserId: user.id })
-    }
-
-    setQueueCaptureEnabled(true)
-    this.setupRuntime(user.id)
-
-    patchCloudSyncState({
-      enabled: true,
-      authenticated: true,
-      status: statusByConnectivity('idle'),
-      lastError: meta.lastError || undefined,
-      lastSyncedAt: meta.lastSyncedAt || undefined,
+    this.syncPromise = this.runSync(reason).finally(() => {
+      this.syncPromise = undefined
     })
 
-    if (trigger === 'startup' || trigger === 'auth' || trigger === 'enable') {
-      void this.syncNow(trigger)
-    }
-  }
-
-  private setupRuntime(userId: string) {
-    this.attachDomListeners()
-
-    if (!this.intervalId) {
-      this.intervalId = window.setInterval(() => {
-        void this.syncNow('focus')
-      }, SYNC_INTERVAL_MS)
-    }
-
-    if (!this.channel) {
-      void this.subscribeRealtime(userId)
-    }
-  }
-
-  private teardownRuntime() {
-    if (this.intervalId) {
-      window.clearInterval(this.intervalId)
-      this.intervalId = undefined
-    }
-
-    if (this.channel) {
-      void this.channel.unsubscribe()
-      this.channel = undefined
-    }
-
-    this.detachDomListeners()
-  }
-
-  private attachDomListeners() {
-    if (this.listenersAttached) {
-      return
-    }
-
-    this.listenersAttached = true
-    window.addEventListener('online', this.handleOnline)
-    window.addEventListener('offline', this.handleOffline)
-    window.addEventListener('focus', this.handleFocus)
-    document.addEventListener('visibilitychange', this.handleVisibility)
-  }
-
-  private detachDomListeners() {
-    if (!this.listenersAttached) {
-      return
-    }
-
-    this.listenersAttached = false
-    window.removeEventListener('online', this.handleOnline)
-    window.removeEventListener('offline', this.handleOffline)
-    window.removeEventListener('focus', this.handleFocus)
-    document.removeEventListener('visibilitychange', this.handleVisibility)
-  }
-
-  private async subscribeRealtime(userId: string) {
-    const supabase = await assertSupabaseClient()
-
-    const channel = supabase.channel(`cloud-sync-${userId}`)
-    for (const table of SYNC_TABLES) {
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: REMOTE_TABLE_BY_SYNC_TABLE[table],
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          void this.syncNow('realtime')
-        },
-      )
-    }
-
-    channel.subscribe()
-    this.channel = channel
+    return this.syncPromise
   }
 
   private async runSync(reason: SyncReason) {
-    if (!this.shouldSyncRun()) {
+    void reason
+    const meta = await getOrCreateSyncMeta(db)
+    const pendingCount = await getPendingQueueCount(db)
+
+    if (!meta.enabled) {
+      setCloudSyncState({
+        enabled: false,
+        authenticated: Boolean(this.lastUserId),
+        status: 'disabled',
+        pendingCount,
+      })
       return
     }
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      patchCloudSyncState({ status: 'offline' })
-      return
-    }
-
-    const supabase = await assertSupabaseClient()
-    const user = await getCloudUser()
+    const user = await this.safeGetCloudUser()
     if (!user) {
+      setCloudSyncState({
+        enabled: true,
+        authenticated: false,
+        status: 'paused',
+        pendingCount,
+      })
       return
     }
 
-    patchCloudSyncState({ status: 'syncing', lastError: undefined })
+    if (!isBrowserOnline()) {
+      setCloudSyncState({
+        enabled: true,
+        authenticated: true,
+        status: 'offline',
+        pendingCount,
+      })
+      return
+    }
 
-    await this.pushQueue(supabase, user.id)
-    await this.pullRemoteChanges(supabase, user.id)
-
-    const syncedAt = nowIso()
-    await patchSyncMeta({
-      linkedUserId: user.id,
-      lastSyncedAt: syncedAt,
-      lastError: '',
-    })
-
-    await this.refreshPendingCount()
-
-    patchCloudSyncState({
-      status: statusByConnectivity('idle'),
-      lastSyncedAt: syncedAt,
+    setCloudSyncState({
+      enabled: true,
+      authenticated: true,
+      status: 'syncing',
+      pendingCount,
       lastError: undefined,
     })
 
-    if (reason === 'manual') {
-      patchCloudSyncState({ status: statusByConnectivity('idle') })
-    }
-  }
+    try {
+      await this.pushCycle(user.id)
+      await this.pullCycle()
 
-  private async pushQueue(supabase: SupabaseClient, userId: string) {
-    for (let turn = 0; turn < 40; turn += 1) {
-      const batch = await listPendingQueueEntries(SYNC_BATCH_SIZE)
-      if (batch.length === 0) {
+      const syncedAt = nowIso()
+      const updatedMeta = await updateSyncMeta(db, {
+        lastSyncedAt: syncedAt,
+        lastError: undefined,
+      })
+
+      setCloudSyncState({
+        enabled: true,
+        authenticated: true,
+        status: this.resolveIdleStatus(true, true),
+        pendingCount: await getPendingQueueCount(db),
+        lastSyncedAt: updatedMeta.lastSyncedAt,
+        lastError: undefined,
+      })
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      await updateSyncMeta(db, {
+        lastError: errorMessage,
+      })
+
+      if (isAuthError(error)) {
+        this.disableRuntime()
+        setCloudSyncState({
+          enabled: true,
+          authenticated: false,
+          status: 'paused',
+          pendingCount: await getPendingQueueCount(db),
+          lastError: errorMessage,
+        })
         return
       }
 
-      for (const entry of batch) {
+      setCloudSyncState({
+        enabled: true,
+        authenticated: true,
+        status: isBrowserOnline() ? 'error' : 'offline',
+        pendingCount: await getPendingQueueCount(db),
+        lastError: errorMessage,
+      })
+
+      if (isNetworkError(error)) {
+        return
+      }
+      throw error
+    }
+  }
+
+  private async pushCycle(userId: string) {
+    while (true) {
+      const queueEntries = await listDueQueueEntries(db, PUSH_BATCH_SIZE)
+      if (queueEntries.length === 0) {
+        return
+      }
+
+      for (const entry of queueEntries) {
         try {
-          await this.pushEntry(entry, supabase, userId)
-          await removeSyncQueueEntry(entry.id)
+          await this.pushQueueEntry(entry, userId)
+          await removeQueueEntries(db, [entry.id])
         } catch (error) {
           if (isAuthError(error)) {
             throw error
           }
 
-          const message = error instanceof Error ? error.message : 'Could not sync entry.'
-          await markSyncQueueEntryFailure(entry.id, message)
+          const retryCount = entry.retryCount + 1
+          const nextRetryAt = new Date(Date.now() + computeRetryDelayMs(retryCount)).toISOString()
+          await markQueueEntryRetry(db, entry.id, getErrorMessage(error), retryCount, nextRetryAt)
+
+          if (isNetworkError(error)) {
+            throw error
+          }
         }
       }
     }
   }
 
-  private async pushEntry(entry: SyncQueueEntry, supabase: SupabaseClient, userId: string) {
+  private async pushQueueEntry(
+    entry: {
+      id: string
+      table: (typeof SYNC_TABLES)[number]
+      entityId: string
+      op: 'upsert' | 'delete'
+    },
+    userId: string,
+  ) {
     if (entry.op === 'delete') {
-      await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+      await this.remoteRepository.markDeleted(entry.table, entry.entityId)
       return
     }
 
     if (entry.table === 'categories') {
-      const row = await db.categories.get(entry.entityId)
-      if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+      const category = await db.categories.get(entry.entityId)
+      if (!category) {
+        await this.remoteRepository.markDeleted(entry.table, entry.entityId)
         return
       }
 
-      await this.upsertRemoteRow(entry.table, toRemoteCategory(row, userId), supabase)
+      await this.remoteRepository.upsertCategory(mapCategoryToRemoteRow(category, userId))
       return
     }
 
     if (entry.table === 'items') {
-      const row = await db.items.get(entry.entityId)
-      if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+      const item = await db.items.get(entry.entityId)
+      if (!item) {
+        await this.remoteRepository.markDeleted(entry.table, entry.entityId)
         return
       }
 
-      await this.upsertRemoteRow(entry.table, toRemoteItem(row, userId), supabase)
+      await this.remoteRepository.upsertItem(mapItemToRemoteRow(item, userId))
       return
     }
 
     if (entry.table === 'outfits') {
-      const row = await db.outfits.get(entry.entityId)
-      if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+      const outfit = await db.outfits.get(entry.entityId)
+      if (!outfit) {
+        await this.remoteRepository.markDeleted(entry.table, entry.entityId)
         return
       }
 
-      await this.upsertRemoteRow(entry.table, toRemoteOutfit(row, userId), supabase)
+      await this.remoteRepository.upsertOutfit(mapOutfitToRemoteRow(outfit, userId))
       return
     }
 
-    if (entry.table === 'laundryLogs') {
-      const row = await db.laundryLogs.get(entry.entityId)
-      if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+    if (entry.table === 'laundry_logs') {
+      const log = await db.laundryLogs.get(entry.entityId)
+      if (!log) {
+        await this.remoteRepository.markDeleted(entry.table, entry.entityId)
         return
       }
 
-      await this.upsertRemoteRow(entry.table, toRemoteLaundryLog(row, userId), supabase)
+      await this.remoteRepository.upsertLaundryLog(mapLaundryLogToRemoteRow(log, userId))
       return
     }
 
-    if (entry.table === 'photos') {
-      const row = await db.photos.get(entry.entityId)
-      if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
-        return
-      }
-
-      const storagePath = buildPhotoStoragePath(userId, row.itemId, row.id, row.mimeType)
-      const { error: uploadError } = await supabase.storage
-        .from('item-photos')
-        .upload(storagePath, row.blob, {
-          upsert: true,
-          contentType: row.mimeType,
-        })
-
-      if (uploadError) {
-        throw new Error(uploadError.message)
-      }
-
-      await this.upsertRemoteRow(entry.table, toRemotePhoto(row, userId, storagePath), supabase)
+    const photo = await db.photos.get(entry.entityId)
+    if (!photo) {
+      await this.remoteRepository.markDeleted(entry.table, entry.entityId)
       return
     }
 
-    throw new Error(`Unsupported sync table: ${entry.table}`)
+    const storagePath = buildPhotoStoragePath(userId, photo.itemId, photo.id, photo.mimeType)
+    await this.remoteRepository.upsertPhoto(
+      mapPhotoToRemoteRow(photo, userId, storagePath),
+      photo.blob,
+    )
   }
 
-  private async upsertRemoteRow(
-    table: SyncTableName,
-    payload:
-      | RemoteCategoryRow
-      | RemoteItemRow
-      | RemoteOutfitRow
-      | RemoteLaundryLogRow
-      | RemotePhotoRow,
-    supabase: SupabaseClient,
-  ) {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-    const { error } = await supabase.from(remoteTable).upsert(payload as never, {
-      onConflict: 'user_id,id',
-    })
-
-    if (error) {
-      throw new Error(error.message)
-    }
-  }
-
-  private async markRemoteDeleted(
-    table: SyncTableName,
-    entityId: string,
-    supabase: SupabaseClient,
-    userId: string,
-  ) {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-
-    if (table === 'photos') {
-      const { data, error } = await supabase
-        .from('photos')
-        .select('storage_path')
-        .eq('user_id', userId)
-        .eq('id', entityId)
-        .maybeSingle()
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      if (data?.storage_path) {
-        const { error: removeError } = await supabase.storage
-          .from('item-photos')
-          .remove([data.storage_path])
-
-        if (removeError) {
-          throw new Error(removeError.message)
-        }
-      }
-    }
-
-    const { error } = await supabase
-      .from(remoteTable)
-      .update({ deleted_at: nowIso() } as never)
-      .eq('user_id', userId)
-      .eq('id', entityId)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-  }
-
-  private async pullRemoteChanges(supabase: SupabaseClient, userId: string) {
-    const meta = await ensureSyncMeta()
-    const cursors = {
-      ...meta.cursors,
-    }
+  private async pullCycle() {
+    let meta = await getOrCreateSyncMeta(db)
 
     for (const table of SYNC_TABLES) {
-      const pendingIds = await getPendingEntityIdsByTable(table)
-      const result = await this.pullTableChanges(table, supabase, userId, cursors[table], pendingIds)
-      if (result.cursor) {
-        cursors[table] = result.cursor
-      }
-    }
+      let cursor = meta.cursors[table]
 
-    await patchSyncMeta({ cursors })
-  }
-
-  private async pullTableChanges<TableName extends SyncTableName>(
-    table: TableName,
-    supabase: SupabaseClient,
-    userId: string,
-    cursor: SyncCursor | undefined,
-    pendingIds: Set<string>,
-  ): Promise<RemotePullResult<RemoteRowMap[TableName]>> {
-    let currentCursor = cursor
-
-    for (let page = 0; page < 30; page += 1) {
-      const batch = await this.fetchRemoteBatch(table, supabase, userId, currentCursor)
-      if (batch.rows.length === 0) {
-        return {
-          rows: [],
-          cursor: currentCursor,
-        }
-      }
-
-      for (const row of batch.rows) {
-        currentCursor = {
-          serverUpdatedAt: row.server_updated_at,
-          id: row.id,
+      while (true) {
+        const { rows } = await this.remoteRepository.pullSince(table, cursor, PULL_BATCH_SIZE)
+        if (rows.length === 0) {
+          break
         }
 
-        if (pendingIds.has(row.id)) {
-          continue
+        let blockedByPendingLocalEntry = false
+        let lastAppliedCursor = cursor
+
+        for (const row of rows) {
+          const hasPendingEntry = await hasPendingEntryForRecord(db, table, row.id)
+          if (hasPendingEntry) {
+            blockedByPendingLocalEntry = true
+            break
+          }
+
+          await this.applyRemoteRow(table, row)
+          lastAppliedCursor = {
+            serverUpdatedAt: row.server_updated_at,
+            id: row.id,
+          }
         }
 
-        await runWithSyncMuted(async () => {
-          await this.applyRemoteRow(table, row, supabase)
-        })
-      }
+        if (lastAppliedCursor) {
+          const cursorChanged =
+            !cursor ||
+            cursor.id !== lastAppliedCursor.id ||
+            cursor.serverUpdatedAt !== lastAppliedCursor.serverUpdatedAt
+          if (cursorChanged) {
+            meta = await setSyncCursor(db, table, lastAppliedCursor)
+            cursor = meta.cursors[table]
+          }
+        }
 
-      if (batch.rows.length < PULL_BATCH_SIZE) {
-        return {
-          rows: batch.rows,
-          cursor: currentCursor,
+        if (blockedByPendingLocalEntry || rows.length < PULL_BATCH_SIZE) {
+          break
         }
       }
-    }
-
-    return {
-      rows: [],
-      cursor: currentCursor,
     }
   }
 
-  private async fetchRemoteBatch<TableName extends SyncTableName>(
-    table: TableName,
-    supabase: SupabaseClient,
-    userId: string,
-    cursor: SyncCursor | undefined,
-  ): Promise<RemotePullResult<RemoteRowMap[TableName]>> {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-
-    let query = supabase
-      .from(remoteTable)
-      .select('*')
-      .eq('user_id', userId)
-      .order('server_updated_at', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(PULL_BATCH_SIZE)
-
-    if (cursor) {
-      query = query.or(
-        `server_updated_at.gt.${cursor.serverUpdatedAt},and(server_updated_at.eq.${cursor.serverUpdatedAt},id.gt.${cursor.id})`,
-      )
-    }
-
-    const { data, error } = await query
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const rows = (data ?? []) as RemoteRowMap[TableName][]
-
-    return {
-      rows,
-      cursor:
-        rows.length > 0
-          ? {
-              serverUpdatedAt: rows[rows.length - 1].server_updated_at,
-              id: rows[rows.length - 1].id,
-            }
-          : cursor,
-    }
-  }
-
-  private async applyRemoteRow<TableName extends SyncTableName>(
-    table: TableName,
-    row: RemoteRowMap[TableName],
-    supabase: SupabaseClient,
+  private async applyRemoteRow<TTable extends (typeof SYNC_TABLES)[number]>(
+    table: TTable,
+    row: RemoteRowFor<TTable>,
   ) {
-    if (table === 'categories') {
-      const typed = row as RemoteCategoryRow
-      if (typed.deleted_at) {
-        await db.categories.delete(typed.id)
+    await runWithSyncMuted(async () => {
+      if (row.deleted_at) {
+        await this.applyRemoteDelete(table, row.id)
         return
       }
 
-      await db.categories.put(fromRemoteCategory(typed))
+      if (table === 'categories') {
+        await db.categories.put(mapRemoteCategoryToLocal(row as RemoteRowFor<'categories'>))
+        return
+      }
+
+      if (table === 'items') {
+        await db.items.put(mapRemoteItemToLocal(row as RemoteRowFor<'items'>))
+        return
+      }
+
+      if (table === 'outfits') {
+        await db.outfits.put(mapRemoteOutfitToLocal(row as RemoteRowFor<'outfits'>))
+        return
+      }
+
+      if (table === 'laundry_logs') {
+        await db.laundryLogs.put(mapRemoteLaundryLogToLocal(row as RemoteRowFor<'laundry_logs'>))
+        return
+      }
+
+      const photoRow = row as RemoteRowFor<'photos'>
+      const existingPhoto = await db.photos.get(photoRow.id)
+      const photoBlob =
+        existingPhoto && existingPhoto.mimeType === photoRow.mime_type
+          ? existingPhoto.blob
+          : await this.remoteRepository.downloadPhotoBlob(photoRow.storage_path)
+
+      await db.transaction('rw', db.photos, db.items, async () => {
+        await db.photos.put({
+          id: photoRow.id,
+          itemId: photoRow.item_id,
+          blob: photoBlob,
+          mimeType: photoRow.mime_type,
+          width: photoRow.width,
+          height: photoRow.height,
+          createdAt: photoRow.created_at,
+        })
+
+        const linkedItem = await db.items.get(photoRow.item_id)
+        if (linkedItem && !linkedItem.photoIds.includes(photoRow.id)) {
+          await db.items.put({
+            ...linkedItem,
+            photoIds: [...linkedItem.photoIds, photoRow.id],
+          })
+        }
+      })
+    })
+  }
+
+  private async applyRemoteDelete(table: (typeof SYNC_TABLES)[number], entityId: string) {
+    if (table === 'categories') {
+      await db.categories.delete(entityId)
       return
     }
 
     if (table === 'items') {
-      const typed = row as RemoteItemRow
-      if (typed.deleted_at) {
-        await itemRepository.remove(typed.id)
-        return
-      }
-
-      await db.items.put(fromRemoteItem(typed))
-      return
-    }
-
-    if (table === 'outfits') {
-      const typed = row as RemoteOutfitRow
-      if (typed.deleted_at) {
-        await db.outfits.delete(typed.id)
-        return
-      }
-
-      await db.outfits.put(fromRemoteOutfit(typed))
-      return
-    }
-
-    if (table === 'laundryLogs') {
-      const typed = row as RemoteLaundryLogRow
-      if (typed.deleted_at) {
-        await db.laundryLogs.delete(typed.id)
-        return
-      }
-
-      await db.laundryLogs.put(fromRemoteLaundryLog(typed))
-      return
-    }
-
-    if (table === 'photos') {
-      const typed = row as RemotePhotoRow
-
-      if (typed.deleted_at) {
-        await removeLocalPhoto(typed.id, typed.item_id)
-        return
-      }
-
-      const { data, error } = await supabase.storage
-        .from('item-photos')
-        .download(typed.storage_path)
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      const localPhoto = fromRemotePhoto(typed, data)
-      await db.transaction('rw', db.photos, db.items, async () => {
-        await db.photos.put(localPhoto)
-
-        const linkedItem = await db.items.get(localPhoto.itemId)
-        if (!linkedItem) {
-          return
-        }
-
-        await db.items.put({
-          ...linkedItem,
-          photoIds: [...new Set([...linkedItem.photoIds, localPhoto.id])],
+      await db.transaction('rw', db.items, db.photos, db.outfits, db.laundryLogs, async () => {
+        await db.photos.where('itemId').equals(entityId).delete()
+        await db.laundryLogs.where('itemId').equals(entityId).delete()
+        await db.outfits.toCollection().modify((outfit) => {
+          outfit.itemIds = outfit.itemIds.filter((itemId) => itemId !== entityId)
         })
+        await db.items.delete(entityId)
       })
       return
     }
 
-    throw new Error(`Unsupported sync table: ${String(table)}`)
+    if (table === 'outfits') {
+      await db.outfits.delete(entityId)
+      return
+    }
+
+    if (table === 'laundry_logs') {
+      await db.laundryLogs.delete(entityId)
+      return
+    }
+
+    await db.transaction('rw', db.photos, db.items, async () => {
+      const photo = await db.photos.get(entityId)
+      if (!photo) {
+        return
+      }
+
+      await db.photos.delete(entityId)
+
+      const linkedItem = await db.items.get(photo.itemId)
+      if (!linkedItem) {
+        return
+      }
+
+      if (!linkedItem.photoIds.includes(entityId)) {
+        return
+      }
+
+      await db.items.put({
+        ...linkedItem,
+        photoIds: linkedItem.photoIds.filter((id) => id !== entityId),
+      })
+    })
+  }
+
+  private resolveIdleStatus(enabled: boolean, authenticated: boolean) {
+    if (!enabled) {
+      return 'disabled' as const
+    }
+    if (!authenticated) {
+      return 'paused' as const
+    }
+    if (!isBrowserOnline()) {
+      return 'offline' as const
+    }
+    return 'idle' as const
+  }
+
+  private async handleAuthChange(session: Session | null) {
+    const meta = await getOrCreateSyncMeta(db)
+    const pendingCount = await getPendingQueueCount(db)
+    const user = session?.user ?? null
+    this.lastUserId = user?.id
+
+    setCloudSyncState({
+      enabled: meta.enabled,
+      authenticated: Boolean(user),
+      status: this.resolveIdleStatus(meta.enabled, Boolean(user)),
+      pendingCount,
+      lastSyncedAt: meta.lastSyncedAt,
+      lastError: meta.lastError,
+    })
+
+    try {
+      await this.reconcileRuntime(user)
+    } catch (error) {
+      setCloudSyncState({
+        status: 'error',
+        lastError: getErrorMessage(error),
+      })
+    }
+  }
+
+  private async reconcileRuntime(user: User | null) {
+    const meta = await getOrCreateSyncMeta(db)
+    if (!meta.enabled || !user) {
+      this.disableRuntime()
+      return
+    }
+
+    const needsInitialMerge = await this.ensureLinkedUser(meta, user.id)
+    await this.enableRuntime(user.id)
+    if (needsInitialMerge) {
+      await this.syncNow('initial-link')
+      return
+    }
+
+    await this.syncNow('start')
+  }
+
+  private async ensureLinkedUser(meta: Awaited<ReturnType<typeof getOrCreateSyncMeta>>, userId: string) {
+    if (!meta.linkedUserId) {
+      await updateSyncMeta(db, {
+        linkedUserId: userId,
+        cursors: {},
+      })
+      await clearSyncQueue(db)
+      await seedQueueFromLocalData(db)
+      return true
+    }
+
+    if (meta.linkedUserId !== userId) {
+      const message =
+        'This device dataset is linked to another account. Reset data before linking a new account.'
+      await updateSyncMeta(db, { lastError: message })
+      setCloudSyncState({
+        status: 'error',
+        lastError: message,
+      })
+      throw new Error(message)
+    }
+
+    return false
+  }
+
+  private async enableRuntime(userId: string) {
+    if (this.runtimeActive) {
+      return
+    }
+
+    this.runtimeActive = true
+    this.lastUserId = userId
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SYNC_QUEUE_CHANGED_EVENT, this.onQueueChanged as EventListener)
+      window.addEventListener('online', this.onOnline)
+      window.addEventListener('offline', this.onOffline)
+      window.addEventListener('focus', this.onWindowFocus)
+      document.addEventListener('visibilitychange', this.onWindowFocus)
+    }
+
+    this.intervalId = setInterval(() => {
+      void this.syncNow('interval')
+    }, PERIODIC_PULL_MS)
+
+    const supabase = getSupabaseClient()
+    const channel = supabase.channel(`cloud-sync-${userId}`)
+    for (const table of SYNC_TABLES) {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        () => {
+          void this.syncNow('realtime')
+        },
+      )
+    }
+    channel.subscribe()
+    this.realtimeChannelName = channel.topic
+  }
+
+  private disableRuntime() {
+    if (!this.runtimeActive) {
+      return
+    }
+
+    this.runtimeActive = false
+
+    if (typeof window !== 'undefined') {
+      window.removeEventListener(SYNC_QUEUE_CHANGED_EVENT, this.onQueueChanged as EventListener)
+      window.removeEventListener('online', this.onOnline)
+      window.removeEventListener('offline', this.onOffline)
+      window.removeEventListener('focus', this.onWindowFocus)
+      document.removeEventListener('visibilitychange', this.onWindowFocus)
+    }
+
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = undefined
+    }
+
+    if (this.realtimeChannelName) {
+      const supabase = getSupabaseClient()
+      const channel = supabase.getChannels().find((candidate) => candidate.topic === this.realtimeChannelName)
+      if (channel) {
+        void supabase.removeChannel(channel)
+      }
+      this.realtimeChannelName = undefined
+    }
+  }
+
+  private async safeGetCloudUser() {
+    try {
+      const user = await getCloudUser()
+      this.lastUserId = user?.id
+      return user
+    } catch {
+      this.lastUserId = undefined
+      return null
+    }
   }
 }
 
-export const cloudSyncEngine: CloudSyncEngine = new SupabaseCloudSyncEngine()
+export const cloudSyncEngine: CloudSyncEngine = new DefaultCloudSyncEngine()

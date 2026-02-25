@@ -57,6 +57,11 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 )
+const AuthCallbackPage = lazy(() =>
+  import('@/features/auth/auth-callback-page').then((module) => ({
+    default: module.AuthCallbackPage,
+  })),
+)
 
 function RouteFallback() {
   return <div className="px-2 py-8" aria-hidden />
@@ -64,23 +69,12 @@ function RouteFallback() {
 
 export default function App() {
   useEffect(() => {
-    let active = true
-
-    const bootstrap = async () => {
+    const initializeApp = async () => {
       await initializeDatabase()
-      if (!active) {
-        return
-      }
-
       await cloudSyncEngine.start()
     }
 
-    void bootstrap()
-
-    return () => {
-      active = false
-      cloudSyncEngine.stop()
-    }
+    void initializeApp()
   }, [])
 
   return (
@@ -104,6 +98,7 @@ export default function App() {
                 <Route path="/home" element={<Navigate to="/" replace />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
             </Routes>
           </Suspense>
           <PwaUpdatePrompt />

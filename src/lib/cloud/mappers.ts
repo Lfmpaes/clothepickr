@@ -1,10 +1,4 @@
-import type {
-  Category,
-  ClothingItem,
-  LaundryLog,
-  Outfit,
-  PhotoAsset,
-} from '@/lib/types'
+import type { Category, ClothingItem, LaundryLog, Outfit, PhotoAsset } from '@/lib/types'
 import type {
   RemoteCategoryRow,
   RemoteItemRow,
@@ -13,25 +7,26 @@ import type {
   RemotePhotoRow,
 } from '@/lib/cloud/types'
 
-function extensionFromMimeType(mimeType: string) {
-  if (mimeType.includes('png')) {
+function normalizeStringArray(value: string[] | null | undefined) {
+  return value ?? []
+}
+
+function mimeTypeToExtension(mimeType: string) {
+  if (mimeType === 'image/png') {
     return 'png'
   }
-  if (mimeType.includes('webp')) {
+  if (mimeType === 'image/webp') {
     return 'webp'
-  }
-  if (mimeType.includes('gif')) {
-    return 'gif'
   }
   return 'jpg'
 }
 
 export function buildPhotoStoragePath(userId: string, itemId: string, photoId: string, mimeType: string) {
-  const extension = extensionFromMimeType(mimeType)
+  const extension = mimeTypeToExtension(mimeType)
   return `${userId}/${itemId}/${photoId}.${extension}`
 }
 
-export function toRemoteCategory(category: Category, userId: string): RemoteCategoryRow {
+export function mapCategoryToRemoteRow(category: Category, userId: string): RemoteCategoryRow {
   return {
     user_id: userId,
     id: category.id,
@@ -45,7 +40,7 @@ export function toRemoteCategory(category: Category, userId: string): RemoteCate
   }
 }
 
-export function fromRemoteCategory(row: RemoteCategoryRow): Category {
+export function mapRemoteCategoryToLocal(row: RemoteCategoryRow): Category {
   return {
     id: row.id,
     name: row.name,
@@ -56,7 +51,7 @@ export function fromRemoteCategory(row: RemoteCategoryRow): Category {
   }
 }
 
-export function toRemoteItem(item: ClothingItem, userId: string): RemoteItemRow {
+export function mapItemToRemoteRow(item: ClothingItem, userId: string): RemoteItemRow {
   return {
     user_id: userId,
     id: item.id,
@@ -76,24 +71,24 @@ export function toRemoteItem(item: ClothingItem, userId: string): RemoteItemRow 
   }
 }
 
-export function fromRemoteItem(row: RemoteItemRow): ClothingItem {
+export function mapRemoteItemToLocal(row: RemoteItemRow): ClothingItem {
   return {
     id: row.id,
     name: row.name,
     categoryId: row.category_id,
     status: row.status,
-    color: row.color,
-    brand: row.brand,
-    size: row.size,
-    notes: row.notes,
-    seasonTags: row.season_tags,
-    photoIds: row.photo_ids,
+    color: row.color ?? '',
+    brand: row.brand ?? '',
+    size: row.size ?? '',
+    notes: row.notes ?? '',
+    seasonTags: normalizeStringArray(row.season_tags),
+    photoIds: normalizeStringArray(row.photo_ids),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
-export function toRemoteOutfit(outfit: Outfit, userId: string): RemoteOutfitRow {
+export function mapOutfitToRemoteRow(outfit: Outfit, userId: string): RemoteOutfitRow {
   return {
     user_id: userId,
     id: outfit.id,
@@ -109,20 +104,20 @@ export function toRemoteOutfit(outfit: Outfit, userId: string): RemoteOutfitRow 
   }
 }
 
-export function fromRemoteOutfit(row: RemoteOutfitRow): Outfit {
+export function mapRemoteOutfitToLocal(row: RemoteOutfitRow): Outfit {
   return {
     id: row.id,
     name: row.name,
-    itemIds: row.item_ids,
-    occasion: row.occasion,
-    notes: row.notes,
+    itemIds: normalizeStringArray(row.item_ids),
+    occasion: row.occasion ?? '',
+    notes: row.notes ?? '',
     isFavorite: row.is_favorite,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
-export function toRemoteLaundryLog(log: LaundryLog, userId: string): RemoteLaundryLogRow {
+export function mapLaundryLogToRemoteRow(log: LaundryLog, userId: string): RemoteLaundryLogRow {
   return {
     user_id: userId,
     id: log.id,
@@ -136,7 +131,7 @@ export function toRemoteLaundryLog(log: LaundryLog, userId: string): RemoteLaund
   }
 }
 
-export function fromRemoteLaundryLog(row: RemoteLaundryLogRow): LaundryLog {
+export function mapRemoteLaundryLogToLocal(row: RemoteLaundryLogRow): LaundryLog {
   return {
     id: row.id,
     itemId: row.item_id,
@@ -147,7 +142,7 @@ export function fromRemoteLaundryLog(row: RemoteLaundryLogRow): LaundryLog {
   }
 }
 
-export function toRemotePhoto(
+export function mapPhotoToRemoteRow(
   photo: PhotoAsset,
   userId: string,
   storagePath: string,
@@ -163,17 +158,5 @@ export function toRemotePhoto(
     created_at: photo.createdAt,
     deleted_at: null,
     server_updated_at: photo.createdAt,
-  }
-}
-
-export function fromRemotePhoto(row: RemotePhotoRow, blob: Blob): PhotoAsset {
-  return {
-    id: row.id,
-    itemId: row.item_id,
-    blob,
-    mimeType: row.mime_type,
-    width: row.width,
-    height: row.height,
-    createdAt: row.created_at,
   }
 }
