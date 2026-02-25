@@ -274,6 +274,25 @@ export function SettingsPage() {
     }
   }
 
+  const handleCloudErase = async () => {
+    setCloudError(undefined)
+    setCloudMessage(undefined)
+    const confirmed = window.confirm(t('cloudSync.confirm.eraseCloud'))
+    if (!confirmed) {
+      return
+    }
+
+    setIsCloudActionRunning(true)
+    try {
+      await cloudSyncEngine.wipeCloudData()
+      setCloudMessage(t('cloudSync.message.cloudErased'))
+    } catch (cloudError) {
+      setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
+    } finally {
+      setIsCloudActionRunning(false)
+    }
+  }
+
   const cloudStatusLabel = t(`cloudSync.status.${cloudState.status}`)
   const lastSyncedLabel = cloudState.lastSyncedAt
     ? formatDateTime(cloudState.lastSyncedAt)
@@ -403,7 +422,11 @@ export function SettingsPage() {
               <Button variant="secondary" onClick={handleCloudSignOut} disabled={isCloudActionRunning}>
                 {t('cloudSync.signOut')}
               </Button>
+              <Button variant="danger" onClick={handleCloudErase} disabled={isCloudActionRunning}>
+                {isCloudActionRunning ? t('cloudSync.erasingCloud') : t('cloudSync.eraseCloud')}
+              </Button>
             </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.eraseHint')}</p>
 
             {cloudMessage ? (
               <p className="text-sm text-emerald-700 dark:text-emerald-400">{cloudMessage}</p>

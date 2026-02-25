@@ -235,6 +235,12 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.syncNow': 'Sync now',
     'cloudSync.syncingNow': 'Syncing...',
     'cloudSync.signOut': 'Sign out',
+    'cloudSync.eraseCloud': 'Erase cloud data',
+    'cloudSync.erasingCloud': 'Erasing cloud data...',
+    'cloudSync.eraseHint':
+      'Deletes all cloud records and uploaded photos for this account, then disables sync on this device.',
+    'cloudSync.confirm.eraseCloud':
+      'Erase all cloud data for this account? This will remove synced records and cloud photos, and disable sync on this device.',
     'cloudSync.auth.callbackTitle': 'Completing sign in',
     'cloudSync.auth.callbackLoading': 'Validating your session and preparing cloud sync...',
     'cloudSync.auth.callbackError': 'Could not complete cloud sign in.',
@@ -245,6 +251,7 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.message.syncDisabled': 'Cloud sync disabled.',
     'cloudSync.message.syncTriggered': 'Sync started.',
     'cloudSync.message.signedOut': 'Signed out from cloud sync.',
+    'cloudSync.message.cloudErased': 'Cloud data erased. Sync is now disabled on this device.',
     'cloudSync.error.invalidEmail': 'Enter a valid email address.',
     'cloudSync.error.invalidCode': 'Enter a valid code.',
     'cloudSync.error.notConfigured': 'Cloud sync is not configured.',
@@ -499,6 +506,12 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.syncNow': 'Sincronizar agora',
     'cloudSync.syncingNow': 'Sincronizando...',
     'cloudSync.signOut': 'Sair',
+    'cloudSync.eraseCloud': 'Apagar dados da nuvem',
+    'cloudSync.erasingCloud': 'Apagando dados da nuvem...',
+    'cloudSync.eraseHint':
+      'Remove todos os registros em nuvem e fotos enviadas desta conta, e depois desativa a sincronização neste dispositivo.',
+    'cloudSync.confirm.eraseCloud':
+      'Apagar todos os dados em nuvem desta conta? Isso removerá registros sincronizados e fotos na nuvem, e desativará a sincronização neste dispositivo.',
     'cloudSync.auth.callbackTitle': 'Concluindo login',
     'cloudSync.auth.callbackLoading': 'Validando sessão e preparando sincronização...',
     'cloudSync.auth.callbackError': 'Não foi possível concluir o login em nuvem.',
@@ -509,6 +522,7 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.message.syncDisabled': 'Sincronização em nuvem desativada.',
     'cloudSync.message.syncTriggered': 'Sincronização iniciada.',
     'cloudSync.message.signedOut': 'Sessão da nuvem encerrada.',
+    'cloudSync.message.cloudErased': 'Dados em nuvem apagados. A sincronização foi desativada neste dispositivo.',
     'cloudSync.error.invalidEmail': 'Digite um e-mail válido.',
     'cloudSync.error.invalidCode': 'Digite um código válido.',
     'cloudSync.error.notConfigured': 'A sincronização em nuvem não está configurada.',
