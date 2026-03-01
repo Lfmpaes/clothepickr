@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Moon, Sun, Upload } from 'lucide-react'
-import { useSearchParams } from 'react-router-dom'
 import { useLocale } from '@/app/locale-context'
 import { useTheme } from '@/app/theme-context'
 import { PageHeader } from '@/components/page-header'
@@ -12,8 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { Locale } from '@/lib/i18n/translations'
 import { useCloudSyncState } from '@/lib/cloud/sync-state-store'
-import { getCloudUser, sendMagicLink, signOutCloud, verifyEmailOtpCode } from '@/lib/cloud/auth'
-import { isSupabaseConfigured } from '@/lib/cloud/supabase-client'
+import { getCloudUser, sendEmailOtp, signOutCloud, verifyEmailOtp } from '@/lib/cloud/convex-auth'
+import { isConvexConfigured } from '@/lib/cloud/convex-client'
 import { cloudSyncEngine } from '@/lib/cloud/sync-engine'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatDateTime } from '@/lib/utils'
@@ -22,7 +21,6 @@ export function SettingsPage() {
   const { locale, setLocale, t } = useLocale()
   const { theme, toggleTheme } = useTheme()
   const cloudState = useCloudSyncState()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   const [message, setMessage] = useState<string>()
   const [error, setError] = useState<string>()
@@ -39,7 +37,7 @@ export function SettingsPage() {
 
   const restoreInputRef = useRef<HTMLInputElement>(null)
 
-  const cloudConfigured = isSupabaseConfigured()
+  const cloudConfigured = isConvexConfigured()
 
   useEffect(() => {
     let active = true
@@ -71,19 +69,6 @@ export function SettingsPage() {
     }
   }, [cloudState.authenticated])
 
-  useEffect(() => {
-    if (searchParams.get('cloudAuth') !== 'success') {
-      return
-    }
-
-    setCloudMessage(t('cloudSync.message.signedIn'))
-    setCloudError(undefined)
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.delete('cloudAuth')
-      return next
-    }, { replace: true })
-  }, [searchParams, setSearchParams, t])
 
   const handleReset = async () => {
     setError(undefined)
@@ -180,8 +165,8 @@ export function SettingsPage() {
 
     setIsSendingMagicLink(true)
     try {
-      await sendMagicLink(email)
-      setCloudMessage(t('cloudSync.message.magicLinkSent'))
+      await sendEmailOtp(email)
+      setCloudMessage(t('cloudSync.message.codeSent'))
     } catch (cloudError) {
       setCloudError(cloudError instanceof Error ? cloudError.message : t('cloudSync.error.actionFailed'))
     } finally {
@@ -213,7 +198,7 @@ export function SettingsPage() {
 
     setIsVerifyingCode(true)
     try {
-      await verifyEmailOtpCode(email, code)
+      await verifyEmailOtp(email, code)
       const user = await getCloudUser()
       setLinkedEmail(user?.email ?? undefined)
       setEmailCode('')
@@ -354,9 +339,9 @@ export function SettingsPage() {
               onChange={(event) => setMagicLinkEmail(event.target.value)}
             />
             <Button onClick={handleSendMagicLink} disabled={isSendingMagicLink}>
-              {isSendingMagicLink ? t('cloudSync.sendingLink') : t('cloudSync.sendLink')}
+              {isSendingMagicLink ? t('cloudSync.sendingCode') : t('cloudSync.sendCode')}
             </Button>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.magicLinkHint')}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('cloudSync.codeHint')}</p>
 
             <Label htmlFor="cloud-email-code">{t('cloudSync.codeLabel')}</Label>
             <Input

@@ -50,6 +50,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
+          convex: ['convex', '@convex-dev/auth'],
           dexie: ['dexie', 'dexie-react-hooks'],
           forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
           icons: ['lucide-react'],

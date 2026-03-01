@@ -29,17 +29,20 @@ See `AGENTS.md` for domain rules, data model, and Definition of Done.
 - Use `useLiveQuery` from `dexie-react-hooks` to reactively bind components to IndexedDB queries.
 
 ### Optional Cloud Sync (`src/lib/cloud/`)
-- Supabase is used for auth and cloud storage; the app works fully without it.
+- **Convex** is used for auth and cloud storage; the app works fully without it (set `VITE_CONVEX_URL` to enable).
 - `sync-engine.ts` orchestrates bi-directional sync: reads the offline `syncQueue`, applies remote deltas, and persists a sync cursor in `syncMeta`.
-- `queue.ts` captures all local mutations as operations (`upsert`/`delete`) when the user is online — writes flow through repositories, not directly to Supabase.
-- `mappers.ts` converts between local Dexie types and remote Supabase row types.
-- Auth uses Supabase magic-link OTP; the callback route is `/auth/callback` (outside `AppShell`).
+- `queue.ts` captures all local mutations as operations (`upsert`/`delete`) when the user is online — writes flow through repositories, not directly to Convex.
+- `convex-mappers.ts` converts between local Dexie types and remote Convex row types (camelCase on both sides, maps `localId` ↔ `id`).
+- `convex-auth.ts` provides thin wrappers around `@convex-dev/auth` (email OTP via Resend).
+- `convex-client.ts` provides a lazy `ConvexReactClient` singleton; sync engine calls `.mutation()` / `.query()` directly on it.
+- Auth is bridged from React (`ConvexAuthProvider`) to module state via `ConvexAuthBridge` component in `App.tsx`.
+- The backend (`convex/`) uses `@convex-dev/auth` with Resend email OTP. Run `npx convex dev` after cloning to deploy and generate `convex/_generated/`.
 
 ### Feature Modules (`src/features/`)
 Vertical slices: each feature owns its pages, components, and hooks. Features import from `src/lib/` but not from each other.
 
 ### Routing (`src/app/App.tsx`)
-Routes are `React.lazy()`-loaded with `Suspense`. The `AppShell` layout wraps all main routes; `/auth/callback` is a standalone route outside the shell.
+Routes are `React.lazy()`-loaded with `Suspense`. The `AppShell` layout wraps all main routes. When `VITE_CONVEX_URL` is set, `ConvexProvider` + `ConvexAuthProvider` wrap the app.
 
 ### Domain State Machine (`src/lib/domain/statusMachine.ts`)
 All laundry status transitions go through `ClothingStatusMachine`. Valid path: `clean → dirty → washing → drying → clean`. Manual override to any status is permitted from item detail.

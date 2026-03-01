@@ -208,13 +208,16 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.description':
       'Link your account and automatically sync wardrobe data between devices.',
     'cloudSync.notConfigured':
-      'Cloud sync is unavailable. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.',
+      'Cloud sync is unavailable. Add VITE_CONVEX_URL to enable it.',
     'cloudSync.emailLabel': 'Email',
     'cloudSync.emailPlaceholder': 'you@example.com',
     'cloudSync.sendLink': 'Send magic link',
     'cloudSync.sendingLink': 'Sending...',
+    'cloudSync.sendCode': 'Send code',
+    'cloudSync.sendingCode': 'Sending...',
     'cloudSync.magicLinkHint':
       'Open the link from your email on this device to finish sign in.',
+    'cloudSync.codeHint': 'A verification code will be sent to your email.',
     'cloudSync.codeLabel': 'Email code',
     'cloudSync.codePlaceholder': '6-digit code',
     'cloudSync.verifyCode': 'Verify code',
@@ -245,6 +248,7 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.auth.callbackLoading': 'Validating your session and preparing cloud sync...',
     'cloudSync.auth.callbackError': 'Could not complete cloud sign in.',
     'cloudSync.message.magicLinkSent': 'Magic link sent. Check your inbox.',
+    'cloudSync.message.codeSent': 'Code sent. Check your inbox.',
     'cloudSync.message.codeVerified': 'Code verified. You are signed in.',
     'cloudSync.message.signedIn': 'Cloud sign in complete.',
     'cloudSync.message.syncEnabled': 'Cloud sync enabled.',
@@ -479,13 +483,16 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.description':
       'Conecte sua conta e sincronize automaticamente os dados do guarda-roupa entre dispositivos.',
     'cloudSync.notConfigured':
-      'Sincronização em nuvem indisponível. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.',
+      'Sincronização em nuvem indisponível. Adicione VITE_CONVEX_URL para ativar.',
     'cloudSync.emailLabel': 'E-mail',
     'cloudSync.emailPlaceholder': 'voce@exemplo.com',
     'cloudSync.sendLink': 'Enviar link mágico',
     'cloudSync.sendingLink': 'Enviando...',
+    'cloudSync.sendCode': 'Enviar código',
+    'cloudSync.sendingCode': 'Enviando...',
     'cloudSync.magicLinkHint':
       'Abra o link recebido por e-mail neste dispositivo para concluir o login.',
+    'cloudSync.codeHint': 'Um código de verificação será enviado para seu e-mail.',
     'cloudSync.codeLabel': 'Código por e-mail',
     'cloudSync.codePlaceholder': 'Código de 6 dígitos',
     'cloudSync.verifyCode': 'Validar código',
@@ -516,6 +523,7 @@ export const translations: Record<Locale, TranslationMap> = {
     'cloudSync.auth.callbackLoading': 'Validando sessão e preparando sincronização...',
     'cloudSync.auth.callbackError': 'Não foi possível concluir o login em nuvem.',
     'cloudSync.message.magicLinkSent': 'Link mágico enviado. Confira sua caixa de entrada.',
+    'cloudSync.message.codeSent': 'Código enviado. Confira sua caixa de entrada.',
     'cloudSync.message.codeVerified': 'Código validado. Você está conectado.',
     'cloudSync.message.signedIn': 'Login em nuvem concluído.',
     'cloudSync.message.syncEnabled': 'Sincronização em nuvem ativada.',

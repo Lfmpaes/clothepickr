@@ -1,30 +1,24 @@
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
+import { api } from '../../../convex/_generated/api'
+import type {
+  ConvexCategoryRow,
+  ConvexItemRow,
+  ConvexLaundryLogRow,
+  ConvexOutfitRow,
+  ConvexPhotoRow,
+} from '@/lib/cloud/convex-mappers'
 import {
-  fromRemoteCategory,
-  fromRemoteItem,
-  fromRemoteLaundryLog,
-  fromRemoteOutfit,
-  fromRemotePhoto,
-  toRemoteCategory,
-  toRemoteItem,
-  toRemoteLaundryLog,
-  toRemoteOutfit,
-  toRemotePhoto,
-  buildPhotoStoragePath,
-} from '@/lib/cloud/mappers'
-import {
-  SYNC_TABLES,
-  type RemoteCategoryRow,
-  type RemoteItemRow,
-  type RemoteLaundryLogRow,
-  type RemoteOutfitRow,
-  type RemotePhotoRow,
-  type RemotePullResult,
-  type RemoteRowMap,
-  REMOTE_TABLE_BY_SYNC_TABLE,
-} from '@/lib/cloud/types'
-import { getCloudUser, onCloudAuthStateChange } from '@/lib/cloud/auth'
-import { getSupabaseClient } from '@/lib/cloud/supabase-client'
+  fromConvexCategory,
+  fromConvexItem,
+  fromConvexLaundryLog,
+  fromConvexOutfit,
+  fromConvexPhoto,
+  toConvexCategory,
+  toConvexItem,
+  toConvexLaundryLog,
+  toConvexOutfit,
+} from '@/lib/cloud/convex-mappers'
+import { getCloudUser, onCloudAuthStateChange } from '@/lib/cloud/convex-auth'
+import { getConvexReactClient, isConvexConfigured } from '@/lib/cloud/convex-client'
 import {
   clearSyncQueue,
   ensureSyncMeta,
@@ -47,33 +41,21 @@ import {
   subscribeCloudSyncState,
 } from '@/lib/cloud/sync-state-store'
 import { db, itemRepository, reconcileDefaultCategories } from '@/lib/db'
-import type {
-  CloudSyncStatus,
-  SyncCursor,
-  SyncQueueEntry,
-  SyncTableName,
-} from '@/lib/types'
+import type { CloudSyncStatus, SyncCursor, SyncQueueEntry, SyncTableName } from '@/lib/types'
 import { nowIso } from '@/lib/utils'
 
 const SYNC_INTERVAL_MS = 2 * 60 * 1000
 const SYNC_BATCH_SIZE = 100
 const PULL_BATCH_SIZE = 200
-const STORAGE_REMOVE_BATCH_SIZE = 100
-const CLOUD_WIPE_DELETE_ORDER: SyncTableName[] = [
-  'photos',
-  'laundryLogs',
-  'outfits',
-  'items',
-  'categories',
-]
 
-type SyncReason = 'startup' | 'manual' | 'queue' | 'realtime' | 'focus' | 'online' | 'enable' | 'auth'
+const SYNC_TABLES: SyncTableName[] = ['categories', 'items', 'outfits', 'laundryLogs', 'photos']
+
+type SyncReason = 'startup' | 'manual' | 'queue' | 'focus' | 'online' | 'enable' | 'auth'
 
 function statusByConnectivity(defaultStatus: CloudSyncStatus): CloudSyncStatus {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return 'offline'
   }
-
   return defaultStatus
 }
 
@@ -88,15 +70,6 @@ function isAuthError(error: unknown) {
   )
 }
 
-async function assertSupabaseClient() {
-  const supabase = getSupabaseClient()
-  if (!supabase) {
-    throw new Error('Cloud sync is not configured.')
-  }
-
-  return supabase
-}
-
 async function removeLocalPhoto(photoId: string, fallbackItemId?: string) {
   await db.transaction('rw', db.photos, db.items, async () => {
     const current = await db.photos.get(photoId)
@@ -104,14 +77,10 @@ async function removeLocalPhoto(photoId: string, fallbackItemId?: string) {
 
     await db.photos.delete(photoId)
 
-    if (!itemId) {
-      return
-    }
+    if (!itemId) return
 
     const linkedItem = await db.items.get(itemId)
-    if (!linkedItem) {
-      return
-    }
+    if (!linkedItem) return
 
     await db.items.put({
       ...linkedItem,
@@ -131,10 +100,9 @@ export interface CloudSyncEngine {
   subscribe(listener: () => void): () => void
 }
 
-class SupabaseCloudSyncEngine implements CloudSyncEngine {
+class ConvexCloudSyncEngine implements CloudSyncEngine {
   private started = false
   private intervalId?: number
-  private channel?: RealtimeChannel
   private syncPromise?: Promise<void>
   private unsubscribeAuth?: () => void
   private listenersAttached = false
@@ -158,9 +126,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   }
 
   async start() {
-    if (this.started) {
-      return
-    }
+    if (this.started) return
 
     this.started = true
     registerSyncQueueHooks()
@@ -200,7 +166,9 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     const current = await ensureSyncMeta()
 
     if (enabled && current.linkedUserId && user && current.linkedUserId !== user.id) {
-      throw new Error('This device is already linked to another cloud account. Reset local data before switching accounts.')
+      throw new Error(
+        'This device is already linked to another cloud account. Reset local data before switching accounts.',
+      )
     }
 
     let deviceId = current.deviceId
@@ -229,33 +197,21 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   }
 
   async wipeCloudData() {
-    const supabase = await assertSupabaseClient()
+    if (!isConvexConfigured()) throw new Error('Cloud sync is not configured.')
     const user = await getCloudUser()
-    if (!user) {
-      throw new Error('Sign in to erase cloud data.')
-    }
+    if (!user) throw new Error('Sign in to erase cloud data.')
 
     if (this.syncPromise) {
       await this.syncPromise
     }
 
-    patchCloudSyncState({
-      status: 'syncing',
-      lastError: undefined,
-    })
+    patchCloudSyncState({ status: 'syncing', lastError: undefined })
     this.teardownRuntime()
     setQueueCaptureEnabled(false)
 
     try {
-      await this.removeAllRemotePhotoObjects(supabase, user.id)
-
-      for (const table of CLOUD_WIPE_DELETE_ORDER) {
-        const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-        const { error } = await supabase.from(remoteTable).delete().eq('user_id', user.id)
-        if (error) {
-          throw new Error(error.message)
-        }
-      }
+      const client = getConvexReactClient()
+      await client.mutation(api.sync.wipeAllUserData, {})
 
       await clearSyncQueue()
       await patchSyncMeta({
@@ -270,10 +226,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not erase cloud data.'
       await patchSyncMeta({ lastError: message })
-      patchCloudSyncState({
-        status: 'error',
-        lastError: message,
-      })
+      patchCloudSyncState({ status: 'error', lastError: message })
       throw error
     }
   }
@@ -283,13 +236,8 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   }
 
   async syncNow(reason: string = 'manual') {
-    if (!this.started) {
-      return
-    }
-
-    if (!this.shouldSyncRun()) {
-      return
-    }
+    if (!this.started) return
+    if (!this.shouldSyncRun()) return
 
     if (this.syncPromise) {
       await this.syncPromise
@@ -300,11 +248,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
       .catch(async (error: unknown) => {
         const message = error instanceof Error ? error.message : 'Sync failed.'
         await patchSyncMeta({ lastError: message })
-
-        patchCloudSyncState({
-          status: 'error',
-          lastError: message,
-        })
+        patchCloudSyncState({ status: 'error', lastError: message })
 
         if (isAuthError(error)) {
           setQueueCaptureEnabled(false)
@@ -381,7 +325,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     }
 
     setQueueCaptureEnabled(true)
-    this.setupRuntime(user.id)
+    this.setupRuntime()
 
     patchCloudSyncState({
       enabled: true,
@@ -396,17 +340,13 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     }
   }
 
-  private setupRuntime(userId: string) {
+  private setupRuntime() {
     this.attachDomListeners()
 
     if (!this.intervalId) {
       this.intervalId = window.setInterval(() => {
         void this.syncNow('focus')
       }, SYNC_INTERVAL_MS)
-    }
-
-    if (!this.channel) {
-      void this.subscribeRealtime(userId)
     }
   }
 
@@ -416,19 +356,11 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
       this.intervalId = undefined
     }
 
-    if (this.channel) {
-      void this.channel.unsubscribe()
-      this.channel = undefined
-    }
-
     this.detachDomListeners()
   }
 
   private attachDomListeners() {
-    if (this.listenersAttached) {
-      return
-    }
-
+    if (this.listenersAttached) return
     this.listenersAttached = true
     window.addEventListener('online', this.handleOnline)
     window.addEventListener('offline', this.handleOffline)
@@ -437,10 +369,7 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   }
 
   private detachDomListeners() {
-    if (!this.listenersAttached) {
-      return
-    }
-
+    if (!this.listenersAttached) return
     this.listenersAttached = false
     window.removeEventListener('online', this.handleOnline)
     window.removeEventListener('offline', this.handleOffline)
@@ -448,49 +377,21 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     document.removeEventListener('visibilitychange', this.handleVisibility)
   }
 
-  private async subscribeRealtime(userId: string) {
-    const supabase = await assertSupabaseClient()
-
-    const channel = supabase.channel(`cloud-sync-${userId}`)
-    for (const table of SYNC_TABLES) {
-      channel.on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: REMOTE_TABLE_BY_SYNC_TABLE[table],
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          void this.syncNow('realtime')
-        },
-      )
-    }
-
-    channel.subscribe()
-    this.channel = channel
-  }
-
   private async runSync(reason: SyncReason) {
-    if (!this.shouldSyncRun()) {
-      return
-    }
+    if (!this.shouldSyncRun()) return
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       patchCloudSyncState({ status: 'offline' })
       return
     }
 
-    const supabase = await assertSupabaseClient()
     const user = await getCloudUser()
-    if (!user) {
-      return
-    }
+    if (!user) return
 
     patchCloudSyncState({ status: 'syncing', lastError: undefined })
 
-    await this.pushQueue(supabase, user.id)
-    await this.pullRemoteChanges(supabase, user.id)
+    await this.pushQueue()
+    await this.pullRemoteChanges()
     await reconcileDefaultCategories()
 
     const syncedAt = nowIso()
@@ -513,22 +414,19 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     }
   }
 
-  private async pushQueue(supabase: SupabaseClient, userId: string) {
+  private async pushQueue() {
+    const client = getConvexReactClient()
+
     for (let turn = 0; turn < 40; turn += 1) {
       const batch = await listPendingQueueEntries(SYNC_BATCH_SIZE)
-      if (batch.length === 0) {
-        return
-      }
+      if (batch.length === 0) return
 
       for (const entry of batch) {
         try {
-          await this.pushEntry(entry, supabase, userId)
+          await this.pushEntry(entry, client)
           await removeSyncQueueEntry(entry.id)
         } catch (error) {
-          if (isAuthError(error)) {
-            throw error
-          }
-
+          if (isAuthError(error)) throw error
           const message = error instanceof Error ? error.message : 'Could not sync entry.'
           await markSyncQueueEntryFailure(entry.id, message)
         }
@@ -536,343 +434,252 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
     }
   }
 
-  private async pushEntry(entry: SyncQueueEntry, supabase: SupabaseClient, userId: string) {
+  private async pushEntry(entry: SyncQueueEntry, client: ReturnType<typeof getConvexReactClient>) {
     if (entry.op === 'delete') {
-      await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+      await this.markRemoteDeleted(entry.table, entry.entityId, client)
       return
     }
 
     if (entry.table === 'categories') {
       const row = await db.categories.get(entry.entityId)
       if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+        await this.markRemoteDeleted(entry.table, entry.entityId, client)
         return
       }
-
-      await this.upsertRemoteRow(entry.table, toRemoteCategory(row, userId), supabase)
+      await client.mutation(api.categories.upsert, toConvexCategory(row))
       return
     }
 
     if (entry.table === 'items') {
       const row = await db.items.get(entry.entityId)
       if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+        await this.markRemoteDeleted(entry.table, entry.entityId, client)
         return
       }
-
-      await this.upsertRemoteRow(entry.table, toRemoteItem(row, userId), supabase)
+      await client.mutation(api.items.upsert, toConvexItem(row))
       return
     }
 
     if (entry.table === 'outfits') {
       const row = await db.outfits.get(entry.entityId)
       if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+        await this.markRemoteDeleted(entry.table, entry.entityId, client)
         return
       }
-
-      await this.upsertRemoteRow(entry.table, toRemoteOutfit(row, userId), supabase)
+      await client.mutation(api.outfits.upsert, toConvexOutfit(row))
       return
     }
 
     if (entry.table === 'laundryLogs') {
       const row = await db.laundryLogs.get(entry.entityId)
       if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+        await this.markRemoteDeleted(entry.table, entry.entityId, client)
         return
       }
-
-      await this.upsertRemoteRow(entry.table, toRemoteLaundryLog(row, userId), supabase)
+      await client.mutation(api.laundryLogs.upsert, toConvexLaundryLog(row))
       return
     }
 
     if (entry.table === 'photos') {
       const row = await db.photos.get(entry.entityId)
       if (!row) {
-        await this.markRemoteDeleted(entry.table, entry.entityId, supabase, userId)
+        await this.markRemoteDeleted(entry.table, entry.entityId, client)
         return
       }
 
-      const storagePath = buildPhotoStoragePath(userId, row.itemId, row.id, row.mimeType)
-      const { error: uploadError } = await supabase.storage
-        .from('item-photos')
-        .upload(storagePath, row.blob, {
-          upsert: true,
-          contentType: row.mimeType,
-        })
+      // 1. Get presigned upload URL
+      const uploadUrl = await client.mutation(api.photos.generateUploadUrl, {})
 
-      if (uploadError) {
-        throw new Error(uploadError.message)
+      // 2. Upload blob
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': row.mimeType },
+        body: row.blob,
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Photo upload failed: ${uploadResponse.statusText}`)
       }
 
-      await this.upsertRemoteRow(entry.table, toRemotePhoto(row, userId, storagePath), supabase)
+      const { storageId } = (await uploadResponse.json()) as { storageId: string }
+
+      // 3. Record photo metadata
+      await client.mutation(api.photos.upsert, {
+        localId: row.id,
+        itemId: row.itemId,
+        storageId: storageId as never,
+        mimeType: row.mimeType,
+        width: row.width,
+        height: row.height,
+        createdAt: row.createdAt,
+      })
       return
     }
 
     throw new Error(`Unsupported sync table: ${entry.table}`)
   }
 
-  private async upsertRemoteRow(
-    table: SyncTableName,
-    payload:
-      | RemoteCategoryRow
-      | RemoteItemRow
-      | RemoteOutfitRow
-      | RemoteLaundryLogRow
-      | RemotePhotoRow,
-    supabase: SupabaseClient,
-  ) {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-    const { error } = await supabase.from(remoteTable).upsert(payload as never, {
-      onConflict: 'user_id,id',
-    })
-
-    if (error) {
-      throw new Error(error.message)
-    }
-  }
-
   private async markRemoteDeleted(
     table: SyncTableName,
-    entityId: string,
-    supabase: SupabaseClient,
-    userId: string,
+    localId: string,
+    client: ReturnType<typeof getConvexReactClient>,
   ) {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
-
-    if (table === 'photos') {
-      const { data, error } = await supabase
-        .from('photos')
-        .select('storage_path')
-        .eq('user_id', userId)
-        .eq('id', entityId)
-        .maybeSingle()
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      if (data?.storage_path) {
-        const { error: removeError } = await supabase.storage
-          .from('item-photos')
-          .remove([data.storage_path])
-
-        if (removeError) {
-          throw new Error(removeError.message)
-        }
-      }
-    }
-
-    const { error } = await supabase
-      .from(remoteTable)
-      .update({ deleted_at: nowIso() } as never)
-      .eq('user_id', userId)
-      .eq('id', entityId)
-
-    if (error) {
-      throw new Error(error.message)
+    if (table === 'categories') {
+      await client.mutation(api.categories.markDeleted, { localId })
+    } else if (table === 'items') {
+      await client.mutation(api.items.markDeleted, { localId })
+    } else if (table === 'outfits') {
+      await client.mutation(api.outfits.markDeleted, { localId })
+    } else if (table === 'laundryLogs') {
+      await client.mutation(api.laundryLogs.markDeleted, { localId })
+    } else if (table === 'photos') {
+      await client.mutation(api.photos.markDeleted, { localId })
     }
   }
 
-  private async removeAllRemotePhotoObjects(supabase: SupabaseClient, userId: string) {
-    const { data, error } = await supabase
-      .from('photos')
-      .select('storage_path')
-      .eq('user_id', userId)
-      .not('storage_path', 'is', null)
-
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const storagePaths = [...new Set((data ?? []).map((row) => row.storage_path).filter(Boolean))]
-    for (let start = 0; start < storagePaths.length; start += STORAGE_REMOVE_BATCH_SIZE) {
-      const batch = storagePaths.slice(start, start + STORAGE_REMOVE_BATCH_SIZE)
-      const { error: removeError } = await supabase.storage.from('item-photos').remove(batch)
-      if (removeError) {
-        throw new Error(removeError.message)
-      }
-    }
-  }
-
-  private async pullRemoteChanges(supabase: SupabaseClient, userId: string) {
+  private async pullRemoteChanges() {
     const meta = await ensureSyncMeta()
-    const cursors = {
-      ...meta.cursors,
-    }
+    const cursors = { ...meta.cursors }
 
     for (const table of SYNC_TABLES) {
       const pendingIds = await getPendingEntityIdsByTable(table)
-      const result = await this.pullTableChanges(table, supabase, userId, cursors[table], pendingIds)
-      if (result.cursor) {
-        cursors[table] = result.cursor
+      const newCursor = await this.pullTableChanges(table, cursors[table], pendingIds)
+      if (newCursor) {
+        cursors[table] = newCursor
       }
     }
 
     await patchSyncMeta({ cursors })
   }
 
-  private async pullTableChanges<TableName extends SyncTableName>(
-    table: TableName,
-    supabase: SupabaseClient,
-    userId: string,
+  private async pullTableChanges(
+    table: SyncTableName,
     cursor: SyncCursor | undefined,
     pendingIds: Set<string>,
-  ): Promise<RemotePullResult<RemoteRowMap[TableName]>> {
+  ): Promise<SyncCursor | undefined> {
+    const client = getConvexReactClient()
     let currentCursor = cursor
 
     for (let page = 0; page < 30; page += 1) {
-      const batch = await this.fetchRemoteBatch(table, supabase, userId, currentCursor)
-      if (batch.rows.length === 0) {
-        return {
-          rows: [],
-          cursor: currentCursor,
-        }
+      const rows = await this.fetchRemoteBatch(table, client, currentCursor)
+
+      if (rows.length === 0) {
+        return currentCursor
       }
 
-      for (const row of batch.rows) {
+      for (const row of rows) {
         currentCursor = {
-          serverUpdatedAt: row.server_updated_at,
-          id: row.id,
+          serverUpdatedAt: row.serverUpdatedAt,
+          id: row.localId,
         }
 
-        if (pendingIds.has(row.id)) {
-          continue
-        }
+        if (pendingIds.has(row.localId)) continue
 
         await runWithSyncMuted(async () => {
-          await this.applyRemoteRow(table, row, supabase)
+          await this.applyRemoteRow(table, row, client)
         })
       }
 
-      if (batch.rows.length < PULL_BATCH_SIZE) {
-        return {
-          rows: batch.rows,
-          cursor: currentCursor,
-        }
+      if (rows.length < PULL_BATCH_SIZE) {
+        return currentCursor
       }
     }
 
-    return {
-      rows: [],
-      cursor: currentCursor,
-    }
+    return currentCursor
   }
 
-  private async fetchRemoteBatch<TableName extends SyncTableName>(
-    table: TableName,
-    supabase: SupabaseClient,
-    userId: string,
+  private async fetchRemoteBatch(
+    table: SyncTableName,
+    client: ReturnType<typeof getConvexReactClient>,
     cursor: SyncCursor | undefined,
-  ): Promise<RemotePullResult<RemoteRowMap[TableName]>> {
-    const remoteTable = REMOTE_TABLE_BY_SYNC_TABLE[table]
+  ): Promise<
+    Array<(ConvexCategoryRow | ConvexItemRow | ConvexOutfitRow | ConvexLaundryLogRow | ConvexPhotoRow) & { localId: string; serverUpdatedAt: string; deletedAt?: string }>
+  > {
+    const args = { cursor: cursor?.serverUpdatedAt, limit: PULL_BATCH_SIZE }
 
-    let query = supabase
-      .from(remoteTable)
-      .select('*')
-      .eq('user_id', userId)
-      .order('server_updated_at', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(PULL_BATCH_SIZE)
+    if (table === 'categories') return client.query(api.categories.pullSince, args) as never
+    if (table === 'items') return client.query(api.items.pullSince, args) as never
+    if (table === 'outfits') return client.query(api.outfits.pullSince, args) as never
+    if (table === 'laundryLogs') return client.query(api.laundryLogs.pullSince, args) as never
+    if (table === 'photos') return client.query(api.photos.pullSince, args) as never
 
-    if (cursor) {
-      query = query.or(
-        `server_updated_at.gt.${cursor.serverUpdatedAt},and(server_updated_at.eq.${cursor.serverUpdatedAt},id.gt.${cursor.id})`,
-      )
-    }
-
-    const { data, error } = await query
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const rows = (data ?? []) as RemoteRowMap[TableName][]
-
-    return {
-      rows,
-      cursor:
-        rows.length > 0
-          ? {
-              serverUpdatedAt: rows[rows.length - 1].server_updated_at,
-              id: rows[rows.length - 1].id,
-            }
-          : cursor,
-    }
+    throw new Error(`Unsupported sync table: ${table}`)
   }
 
-  private async applyRemoteRow<TableName extends SyncTableName>(
-    table: TableName,
-    row: RemoteRowMap[TableName],
-    supabase: SupabaseClient,
+  private async applyRemoteRow(
+    table: SyncTableName,
+    row: unknown,
+    client: ReturnType<typeof getConvexReactClient>,
   ) {
     if (table === 'categories') {
-      const typed = row as RemoteCategoryRow
-      if (typed.deleted_at) {
-        await db.categories.delete(typed.id)
+      const typed = row as ConvexCategoryRow
+      if (typed.deletedAt) {
+        await db.categories.delete(typed.localId)
         return
       }
-
-      await db.categories.put(fromRemoteCategory(typed))
+      await db.categories.put(fromConvexCategory(typed))
       return
     }
 
     if (table === 'items') {
-      const typed = row as RemoteItemRow
-      if (typed.deleted_at) {
-        await itemRepository.remove(typed.id)
+      const typed = row as ConvexItemRow
+      if (typed.deletedAt) {
+        await itemRepository.remove(typed.localId)
         return
       }
-
-      await db.items.put(fromRemoteItem(typed))
+      await db.items.put(fromConvexItem(typed))
       return
     }
 
     if (table === 'outfits') {
-      const typed = row as RemoteOutfitRow
-      if (typed.deleted_at) {
-        await db.outfits.delete(typed.id)
+      const typed = row as ConvexOutfitRow
+      if (typed.deletedAt) {
+        await db.outfits.delete(typed.localId)
         return
       }
-
-      await db.outfits.put(fromRemoteOutfit(typed))
+      await db.outfits.put(fromConvexOutfit(typed))
       return
     }
 
     if (table === 'laundryLogs') {
-      const typed = row as RemoteLaundryLogRow
-      if (typed.deleted_at) {
-        await db.laundryLogs.delete(typed.id)
+      const typed = row as ConvexLaundryLogRow
+      if (typed.deletedAt) {
+        await db.laundryLogs.delete(typed.localId)
         return
       }
-
-      await db.laundryLogs.put(fromRemoteLaundryLog(typed))
+      await db.laundryLogs.put(fromConvexLaundryLog(typed))
       return
     }
 
     if (table === 'photos') {
-      const typed = row as RemotePhotoRow
+      const typed = row as ConvexPhotoRow
 
-      if (typed.deleted_at) {
-        await removeLocalPhoto(typed.id, typed.item_id)
+      if (typed.deletedAt) {
+        await removeLocalPhoto(typed.localId, typed.itemId)
         return
       }
 
-      const { data, error } = await supabase.storage
-        .from('item-photos')
-        .download(typed.storage_path)
+      const downloadUrl = await client.query(api.photos.getUrl, {
+        storageId: typed.storageId as never,
+      })
 
-      if (error) {
-        throw new Error(error.message)
+      if (!downloadUrl) {
+        throw new Error(`No download URL for photo ${typed.localId}`)
       }
 
-      const localPhoto = fromRemotePhoto(typed, data)
+      const response = await fetch(downloadUrl)
+      if (!response.ok) {
+        throw new Error(`Photo download failed: ${response.statusText}`)
+      }
+
+      const blob = await response.blob()
+      const localPhoto = fromConvexPhoto(typed, blob)
+
       await db.transaction('rw', db.photos, db.items, async () => {
         await db.photos.put(localPhoto)
 
         const linkedItem = await db.items.get(localPhoto.itemId)
-        if (!linkedItem) {
-          return
-        }
+        if (!linkedItem) return
 
         await db.items.put({
           ...linkedItem,
@@ -886,4 +693,4 @@ class SupabaseCloudSyncEngine implements CloudSyncEngine {
   }
 }
 
-export const cloudSyncEngine: CloudSyncEngine = new SupabaseCloudSyncEngine()
+export const cloudSyncEngine: CloudSyncEngine = new ConvexCloudSyncEngine()
