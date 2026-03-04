@@ -6,6 +6,7 @@ import { LocaleProvider } from '@/app/locale-provider'
 import { PwaUpdatePrompt } from '@/app/PwaUpdatePrompt'
 import { ThemeProvider } from '@/app/theme-provider'
 import { initializeDatabase } from '@/lib/db'
+import { getRuntime } from '@/lib/runtime'
 
 const NotFoundPage = lazy(() =>
   import('@/app/pages/not-found').then((module) => ({ default: module.NotFoundPage })),
@@ -57,6 +58,8 @@ function RouteFallback() {
 }
 
 export default function App() {
+  const isWebRuntime = getRuntime() === 'web'
+
   useEffect(() => {
     void initializeDatabase()
   }, [])
@@ -83,8 +86,8 @@ export default function App() {
               </Route>
             </Routes>
           </Suspense>
-          <PwaUpdatePrompt />
-          <Analytics />
+          {isWebRuntime ? <PwaUpdatePrompt /> : null}
+          {isWebRuntime ? <Analytics /> : null}
         </BrowserRouter>
       </ThemeProvider>
     </LocaleProvider>

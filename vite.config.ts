@@ -45,7 +45,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    host: '127.0.0.1',
+    port: 1420,
+    strictPort: true,
+  },
   build: {
+    target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
     rollupOptions: {
       output: {
         manualChunks: {

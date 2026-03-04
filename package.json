@@ -11,10 +11,14 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "tauri:dev": "bun run scripts/tauri.mjs dev",
+    "tauri:build:win": "bun run scripts/tauri.mjs build --bundles nsis,msi",
+    "tauri:build:linux": "bun run scripts/tauri.mjs build --bundles appimage,deb"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@tauri-apps/api": "^2.10.1",
     "@vercel/analytics": "^1.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -32,6 +36,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.58.2",
+    "@tauri-apps/cli": "^2.10.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

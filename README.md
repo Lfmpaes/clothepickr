@@ -23,7 +23,7 @@ bun install
 bun run dev
 ```
 
-Open the local URL shown in the terminal (typically `http://localhost:5173`).
+Open the local URL shown in the terminal (typically `http://127.0.0.1:1420`).
 
 ## Scripts 📌
 ```bash
@@ -33,6 +33,11 @@ bun run lint       # run ESLint
 bun run test       # run unit/integration tests
 bun run test:e2e   # run Playwright E2E tests
 bun run build      # create production build
+bun run tauri:dev         # run desktop app in dev mode
+bun run tauri:build:win  # build Windows bundles (nsis + msi)
+bun run tauri:build:linux # build Linux bundles (appimage + deb)
 ```
 
 Fallback (if Bun is unavailable): `npm install` and `npm run <script>`.
+
+Desktop packaging prerequisites and verification steps are documented in `docs/desktop-tauri.md`.
